@@ -47,6 +47,7 @@ export default function SmartProductionView() {
   const [recipeIngredients, setRecipeIngredients] = useState<{ productId: string; quantityNeeded: number; tempCategoryId?: string }[]>([
     { productId: '', quantityNeeded: 1, tempCategoryId: '' }
   ]);
+  const [rowSearchTerms, setRowSearchTerms] = useState<{[key: number]: string}>({});
   const [recipeError, setRecipeError] = useState('');
 
   // Run execution state
@@ -71,6 +72,13 @@ export default function SmartProductionView() {
   const ingredientProducts = useMemo(() => {
     return products.filter(p => p.productType === 'Insumo' || p.productType === 'Ambos');
   }, [products]);
+
+  // Categories that contain any ingredient products
+  const categoriesWithInsumos = useMemo(() => {
+    return categories.filter(c => 
+      products.some(p => p.categoryId === c.id && (p.productType === 'Insumo' || p.productType === 'Ambos'))
+    );
+  }, [categories, products]);
 
   // Solver: Forecast how many batches/units can currently be produced for each recipe
   const getRecipeForecast = (recipe: Recipe) => {
@@ -147,6 +155,7 @@ export default function SmartProductionView() {
 
   // Handle open recipe modal
   const handleOpenRecipeModal = (recipeToEdit: Recipe | null = null) => {
+    setRowSearchTerms({});
     if (recipeToEdit) {
       setSelectedRecipeForEdit(recipeToEdit);
       setRecipeProductId(recipeToEdit.productId);
@@ -913,7 +922,15 @@ export default function SmartProductionView() {
                   {recipeIngredients.map((ing, index) => {
                     const currentProd = products.find(p => p.id === ing.productId);
                     const selectedCatId = ing.tempCategoryId || currentProd?.categoryId || '';
-                    const filteredIngProducts = ingredientProducts.filter(p => !selectedCatId || p.categoryId === selectedCatId);
+                    const searchForThisRow = (rowSearchTerms[index] || '').trim().toLowerCase();
+                    
+                    const filteredIngProducts = ingredientProducts.filter(p => {
+                      const matchesCategory = !selectedCatId || p.categoryId === selectedCatId;
+                      const matchesSearch = !searchForThisRow || 
+                        p.name.toLowerCase().includes(searchForThisRow) || 
+                        p.sku.toLowerCase().includes(searchForThisRow);
+                      return matchesCategory && matchesSearch;
+                    });
                     
                     const currentStock = currentProd ? currentProd.stock : 0;
                     const minStock = currentProd ? currentProd.minStock : 0;
@@ -934,7 +951,7 @@ export default function SmartProductionView() {
                           </button>
                         )}
 
-                        <div className="grid grid-cols-2 gap-3.5">
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                           {/* Categoria Selector */}
                           <div>
                             <label className="block text-[10px] font-extrabold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-1">
@@ -954,7 +971,7 @@ export default function SmartProductionView() {
                               className="w-full px-3 py-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-200 text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-emerald-500"
                             >
                               <option value="">Todas as Categorias</option>
-                              {categories.map(c => (
+                              {categoriesWithInsumos.map(c => (
                                 <option key={c.id} value={c.id}>
                                   {c.name}
                                 </option>
@@ -962,10 +979,27 @@ export default function SmartProductionView() {
                             </select>
                           </div>
 
+                          {/* Busca Inteligente Input */}
+                          <div>
+                            <label className="block text-[10px] font-extrabold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-1">
+                              2. Busca Rápida
+                            </label>
+                            <input
+                              type="text"
+                              placeholder="Filtro de busca..."
+                              value={rowSearchTerms[index] || ''}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                setRowSearchTerms(prev => ({ ...prev, [index]: val }));
+                              }}
+                              className="w-full px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 text-xs focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                            />
+                          </div>
+
                           {/* Produto Selector (Filtered by Categoria & marked as Insumo/Ambos) */}
                           <div>
                             <label className="block text-[10px] font-extrabold text-slate-400 dark:text-slate-500 uppercase tracking-wider mb-1">
-                              2. Produto / Insumo
+                              3. Produto / Insumo
                             </label>
                             <select
                               value={ing.productId}
@@ -981,8 +1015,8 @@ export default function SmartProductionView() {
                             >
                               <option value="">Selecione o Insumo...</option>
                               {filteredIngProducts.map(p => (
-                                <option key={p.id} value={p.id}>
-                                  {p.imageUrl} {p.name}
+                                <option key={p.id} value={p.id} disabled={p.stock <= 0}>
+                                  {p.imageUrl} {p.name} {p.stock <= 0 ? '(SEM ESTOQUE)' : `(${p.stock} ${p.unit})`}
                                 </option>
                               ))}
                             </select>
@@ -996,14 +1030,14 @@ export default function SmartProductionView() {
                             <div className="flex items-center gap-1.5 bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-850 px-2.5 py-1.5 rounded-xl text-[11px] shadow-2xs">
                               <span className="font-semibold text-slate-405 dark:text-slate-500 uppercase text-[9px] tracking-wider">Estoque:</span>
                               {isNoStock ? (
-                                <span className="font-extrabold text-rose-600 dark:text-rose-450 uppercase text-[9px] bg-rose-50 dark:bg-rose-950/20 px-1.5 py-0.5 rounded border border-rose-100 dark:border-rose-900/30">Zerar</span>
+                                <span className="font-extrabold text-rose-600 dark:text-rose-455 uppercase text-[9px] bg-rose-50 dark:bg-rose-950/20 px-1.5 py-0.5 rounded border border-rose-100 dark:border-rose-900/30">Zerado</span>
                               ) : (
                                 <span className={`font-mono font-bold ${isLowStock ? 'text-amber-500' : 'text-slate-700 dark:text-slate-250'}`}>
                                   {currentStock} {currentProd?.unit}
                                 </span>
                               )}
                               {isLowStock && !isNoStock && (
-                                <span className="font-extrabold text-red-500 dark:text-red-400 uppercase text-[8px] bg-red-50 dark:bg-red-950/20 px-1.5 -my-0.5 rounded border border-red-200 dark:border-red-900/40">Crítico</span>
+                                <span className="font-extrabold text-red-500 dark:text-red-400 uppercase text-[8px] bg-red-50 dark:bg-red-950/20 px-1.5 -my-0.5 rounded border border-red-200 dark:border-red-900/40">Abaixo do Mínimo</span>
                               )}
                             </div>
 

@@ -114,8 +114,8 @@ export default function Sidebar() {
           className="w-full flex items-center justify-between px-3 py-2 rounded-lg text-xs text-[#8A9F9A] hover:text-white hover:bg-white/5 transition-all"
         >
           <span className="flex items-center gap-3">
-            {darkMode ? <Sun className="w-4 h-4 text-emerald-400" /> : <Moon className="w-4 h-4 text-emerald-400" />}
-            <span>Tema: {darkMode ? 'Claro' : 'Escuro'}</span>
+            {darkMode ? <Moon className="w-4 h-4 text-emerald-450" /> : <Sun className="w-4 h-4 text-amber-400" />}
+            <span>Tema: {darkMode ? 'Escuro' : 'Claro'}</span>
           </span>
           <div className="w-8 h-4 bg-emerald-900/40 rounded-full p-0.5 transition-colors">
             <div className={`w-3 h-3 bg-white rounded-full transition-transform ${darkMode ? 'translate-x-4' : 'translate-x-0'}`} />

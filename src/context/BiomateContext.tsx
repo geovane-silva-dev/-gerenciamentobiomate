@@ -268,7 +268,10 @@ const DEFAULT_SMART_LOGS: SmartProductionLog[] = [
 export const BiomateProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [activeTab, setActiveTab] = useState<SidebarTab>('painel');
   const [hideValues, setHideValues] = useState<boolean>(false);
-  const [darkMode, setDarkMode] = useState<boolean>(false);
+  const [darkMode, setDarkMode] = useState<boolean>(() => {
+    const saved = localStorage.getItem('biomate_theme');
+    return saved ? saved === 'dark' : false;
+  });
   const [showProductionCostToggle, setShowProductionCostToggle] = useState<boolean>(true);
   const [showFixedExpensesToggle, setShowFixedExpensesToggle] = useState<boolean>(true);
   const [clientFilter, setClientFilter] = useState<string>('all');
@@ -306,7 +309,23 @@ export const BiomateProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   const [products, setProducts] = useState<Product[]>(() => {
     const local = localStorage.getItem('biomate_products');
-    return local ? JSON.parse(local) : DEFAULT_PRODUCTS;
+    let loaded: Product[] = local ? JSON.parse(local) : DEFAULT_PRODUCTS;
+    const catLocal = localStorage.getItem('biomate_categories');
+    const loadedCategories: Category[] = catLocal ? JSON.parse(catLocal) : DEFAULT_CATEGORIES;
+    const insumosCategoryIds = new Set(
+      loadedCategories
+        .filter(c => c.id === 'cat-insumos' || c.name.toLowerCase().includes('insumo'))
+        .map(c => c.id)
+    );
+
+    loaded = loaded.map(p => {
+      if (!p.productType) {
+        const type = insumosCategoryIds.has(p.categoryId) ? 'Insumo' : 'Produto Final';
+        return { ...p, productType: type };
+      }
+      return p;
+    });
+    return loaded;
   });
 
   const [sales, setSales] = useState<Sale[]>(() => {
@@ -367,8 +386,10 @@ export const BiomateProvider: React.FC<{ children: React.ReactNode }> = ({ child
   useEffect(() => {
     if (darkMode) {
       document.documentElement.classList.add('dark');
+      localStorage.setItem('biomate_theme', 'dark');
     } else {
       document.documentElement.classList.remove('dark');
+      localStorage.setItem('biomate_theme', 'light');
     }
   }, [darkMode]);
 
