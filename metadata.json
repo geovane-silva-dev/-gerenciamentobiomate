@@ -1,0 +1,6 @@
+{
+  "name": "BIOMATE",
+  "description": "Sistema completo de ERP e Dashboard para controle de performance operacional, estoque, vendas, despesas e KPI de produção.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
