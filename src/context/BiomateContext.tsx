@@ -325,14 +325,36 @@ export const BiomateProvider: React.FC<{ children: React.ReactNode }> = ({ child
   };
 
   // Firebase configuration validation
-  const isMockFirebase = !db.app.options.apiKey || db.app.options.apiKey.includes('mock');
+  const isMockFirebase = !db.app?.options?.apiKey || db.app.options.apiKey.includes('mock');
+
+  // Helper to remove any 'undefined' property fields recursively so Firestore setDoc does not throw unsupported value errors
+  const cleanData = (obj: any): any => {
+    if (obj === null || obj === undefined) return null;
+    if (Array.isArray(obj)) {
+      return obj.map(cleanData);
+    }
+    if (typeof obj === 'object') {
+      const clean: any = {};
+      for (const key of Object.keys(obj)) {
+        const val = obj[key];
+        if (val !== undefined) {
+          clean[key] = cleanData(val);
+        }
+      }
+      return clean;
+    }
+    return obj;
+  };
 
   // Firebase Firestore write helpers
   const saveDoc = async (coll: string, id: string, data: any) => {
     if (isMockFirebase) return;
     try {
-      await setDoc(doc(db, coll, id), data);
+      const cleaned = cleanData(data);
+      console.log(`Writing document to Firestore: ${coll}/${id}`, cleaned);
+      await setDoc(doc(db, coll, id), cleaned);
     } catch (error) {
+      console.error(`Error saving document to Firestore at ${coll}/${id}:`, error);
       handleFirestoreError(error, OperationType.WRITE, `${coll}/${id}`);
     }
   };
@@ -340,8 +362,10 @@ export const BiomateProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const removeDoc = async (coll: string, id: string) => {
     if (isMockFirebase) return;
     try {
+      console.log(`Deleting document from Firestore: ${coll}/${id}`);
       await deleteDoc(doc(db, coll, id));
     } catch (error) {
+      console.error(`Error deleting document from Firestore at ${coll}/${id}:`, error);
       handleFirestoreError(error, OperationType.DELETE, `${coll}/${id}`);
     }
   };
@@ -449,41 +473,69 @@ export const BiomateProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   // Seed default data or upload local data of user to Firestore if it is a real connection and Firestore is completely empty
   useEffect(() => {
-    const seedOrUploadLocalToFirestore = async () => {
+    const syncDatabaseOnStart = async () => {
       if (isMockFirebase || !isAuthenticated) {
         setIsCloudReady(true);
         return;
       }
+      
+      console.log("Starting secure sequential synchronization with Firebase Firestore...");
+      setAuthLoading(true);
       try {
-        const { getDocs, query, limit } = await import('firebase/firestore');
-        const snap = await getDocs(query(collection(db, 'categories'), limit(1)));
-        if (snap.empty) {
-          console.log("Firestore is completely empty. Uploading current state or default data...");
-          
-          const uploadColl = async (colName: string, items: any[]) => {
-            for (const item of items) {
-              await setDoc(doc(db, colName, item.id), item);
-            }
-          };
+        const { getDocs, query, collection, setDoc, doc } = await import('firebase/firestore');
 
-          // Gracefully upload whatever is in the active state (loaded from localstorage or DEFAULTs)
-          await uploadColl('categories', categories.length > 0 ? categories : DEFAULT_CATEGORIES);
-          await uploadColl('products', products.length > 0 ? products : DEFAULT_PRODUCTS);
-          await uploadColl('sales', sales.length > 0 ? sales : DEFAULT_SALES);
-          await uploadColl('expenses', expenses.length > 0 ? expenses : DEFAULT_EXPENSES);
-          await uploadColl('productionBatches', productionBatches.length > 0 ? productionBatches : DEFAULT_PRODUCTION_BATCHES);
-          await uploadColl('recipes', recipes.length > 0 ? recipes : DEFAULT_RECIPES);
-          await uploadColl('smartProductionLogs', smartProductionLogs.length > 0 ? smartProductionLogs : DEFAULT_SMART_LOGS);
-          
-          console.log("Firestore seeding/upload completed successfully!");
-        }
+        // Helper to check and sync each collection individually so we never lose local data nor partial-write syncs
+        const syncCollection = async (
+          colName: string,
+          localStateItems: any[],
+          defaultItems: any[],
+          setStateFn: (items: any[]) => void
+        ) => {
+          try {
+            const snap = await getDocs(query(collection(db, colName)));
+            if (snap.empty) {
+              console.log(`Firestore collection '${colName}' is blank. Uploading active local storage content or default data...`);
+              const itemsToUpload = localStateItems.length > 0 ? localStateItems : defaultItems;
+              for (const item of itemsToUpload) {
+                await setDoc(doc(db, colName, item.id), cleanData(item));
+              }
+              setStateFn(itemsToUpload);
+            } else {
+              const fetchedItems: any[] = [];
+              snap.forEach(d => {
+                fetchedItems.push(d.data());
+              });
+              // Sort logs and sales and batches to maintain descending order
+              if (colName === 'sales' || colName === 'productionBatches' || colName === 'smartProductionLogs') {
+                fetchedItems.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+              }
+              console.log(`Synchronized successfully! Fetched ${fetchedItems.length} items from cloud storage for collection: ${colName}`);
+              setStateFn(fetchedItems);
+            }
+          } catch (colError: any) {
+            console.error(`Collection level bootstrap sync error inside '${colName}'`, colError);
+          }
+        };
+
+        // Bootstrap load and sync each schema domain sequence
+        await syncCollection('categories', categories, DEFAULT_CATEGORIES, setCategories);
+        await syncCollection('products', products, DEFAULT_PRODUCTS, setProducts);
+        await syncCollection('sales', sales, DEFAULT_SALES, setSales);
+        await syncCollection('expenses', expenses, DEFAULT_EXPENSES, setExpenses);
+        await syncCollection('productionBatches', productionBatches, DEFAULT_PRODUCTION_BATCHES, setProductionBatches);
+        await syncCollection('recipes', recipes, DEFAULT_RECIPES, setRecipes);
+        await syncCollection('smartProductionLogs', smartProductionLogs, DEFAULT_SMART_LOGS, setSmartProductionLogs);
+
+        console.log("All collections synced and secured nicely.");
       } catch (error) {
-        console.warn("Seeding or uploading to Firestore failed (likely auth status or rules checks):", error);
+        console.error("Firestore global bootstrap operation failing: ", error);
       } finally {
         setIsCloudReady(true);
+        setAuthLoading(false);
       }
     };
-    seedOrUploadLocalToFirestore();
+
+    syncDatabaseOnStart();
   }, [isMockFirebase, isAuthenticated]);
 
   // Auth anonymous fallback state and state listeners
