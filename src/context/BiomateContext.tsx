@@ -405,7 +405,8 @@ export const BiomateProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   const deleteCategory = (id: string) => {
     setCategories(prev => prev.filter(c => c.id !== id));
-    // Set associated products categories to general if deleted or leave them
+    // Set associated products categories to empty string if deleted
+    setProducts(prev => prev.map(p => p.categoryId === id ? { ...p, categoryId: '' } : p));
   };
 
   const addProduct = (prod: Omit<Product, 'id'>) => {

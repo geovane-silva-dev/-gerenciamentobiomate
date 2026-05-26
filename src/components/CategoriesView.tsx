@@ -71,15 +71,16 @@ export default function CategoriesView() {
 
   const handleDelete = (id: string, name: string) => {
     const associatedCount = productCounts[id] || 0;
+    
+    let message = `Tem certeza que deseja excluir a categoria "${name}"?`;
     if (associatedCount > 0) {
-      alert(`Não é possível excluir a categoria "${name}" pois existem ${associatedCount} produto(s) vinculado(s) a ela. Por favor, reatribua a categoria desses produtos antes de excluí-la.`);
-      return;
+      message = `A categoria "${name}" possui ${associatedCount} produto(s) vinculado(s).\n\nAo excluir esta categoria, estes produtos ficarão sem categoria ("N/D") mas continuarão no sistema normalmente. Deseja continuar e excluir a categoria?`;
     }
 
     confirmAction({
-      title: 'Excluir Categoria Organizacional',
-      message: `Tem certeza que deseja desinstalar ou excluir a categoria de insumos "${name}"?`,
-      confirmText: 'Excluir',
+      title: 'Excluir Categoria',
+      message: message,
+      confirmText: 'Sim, Excluir',
       isDanger: true,
       onConfirm: () => {
         deleteCategory(id);

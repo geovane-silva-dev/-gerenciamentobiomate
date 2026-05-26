@@ -12,7 +12,8 @@ import {
   CheckCircle2,
   ListFilter,
   Save,
-  X
+  X,
+  Trash2
 } from 'lucide-react';
 
 interface StockTransaction {
@@ -30,6 +31,7 @@ export default function InventoryView() {
     products,
     categories,
     updateProduct,
+    deleteProduct,
     hideValues,
     confirmAction
   } = useBiomate();
@@ -146,6 +148,31 @@ export default function InventoryView() {
     } else {
       executeAdjust();
     }
+  };
+
+  const handleDeleteProduct = (id: string, name: string) => {
+    confirmAction({
+      title: 'Excluir Item do Estoque',
+      message: `Tem certeza que deseja excluir "${name}" definitivamente do estoque e do catálogo?`,
+      confirmText: 'Excluir Definitivamente',
+      isDanger: true,
+      onConfirm: () => {
+        deleteProduct(id);
+      }
+    });
+  };
+
+  const handleDeleteTransaction = (id: string) => {
+    confirmAction({
+      title: 'Excluir Lançamento de Estoque',
+      message: 'Tem certeza de que deseja excluir este registro de movimentação de estoque? Esta ação limpa apenas o histórico de log do diário.',
+      confirmText: 'Remover Registro',
+      isDanger: true,
+      onConfirm: () => {
+        const nextTxs = transactions.filter(t => t.id !== id);
+        saveTransactions(nextTxs);
+      }
+    });
   };
 
   return (
@@ -309,7 +336,7 @@ export default function InventoryView() {
                         </div>
                       </td>
                       <td className="p-4 text-right">
-                        <div className="flex gap-1 justify-end">
+                        <div className="flex gap-1.5 justify-end items-center">
                           <button
                             onClick={() => handleOpenAdjust(p, 'entrada')}
                             className="bg-emerald-50 hover:bg-[#E5FAF2] dark:bg-emerald-950/30 dark:hover:bg-[#00C984]/15 text-emerald-800 dark:text-[#00C984] p-1.5 rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer"
@@ -325,6 +352,13 @@ export default function InventoryView() {
                           >
                             <ArrowDownLeft className="w-4 h-4" />
                             <span>Saída</span>
+                          </button>
+                          <button
+                            onClick={() => handleDeleteProduct(p.id, p.name)}
+                            className="p-1.5 rounded-lg text-rose-550 dark:text-rose-450 hover:bg-rose-50 dark:hover:bg-rose-950/20 transition-all cursor-pointer"
+                            title="Excluir item definitivamente"
+                          >
+                            <Trash2 className="w-4 h-4" />
                           </button>
                         </div>
                       </td>
@@ -349,7 +383,8 @@ export default function InventoryView() {
                 <th className="py-2 text-center">Operação</th>
                 <th className="py-2 text-center font-mono">Qtd</th>
                 <th className="py-2 text-center">Responsável</th>
-                <th className="py-2 text-right">Motivação Detalhada</th>
+                <th className="py-2 text-left">Motivação Detalhada</th>
+                <th className="py-2 text-right">Ação</th>
               </tr>
             </thead>
             <tbody>
@@ -370,7 +405,16 @@ export default function InventoryView() {
                       {tx.type === 'entrada' ? '+' : '-'}{tx.quantity} {prod?.unit || ''}
                     </td>
                     <td className="py-2.5 text-center">{tx.operator}</td>
-                    <td className="py-2.5 text-right font-medium text-gray-500 dark:text-emerald-400">{tx.reason}</td>
+                    <td className="py-2.5 text-left font-medium text-gray-500 dark:text-emerald-400">{tx.reason}</td>
+                    <td className="py-2.5 text-right font-medium">
+                      <button
+                        onClick={() => handleDeleteTransaction(tx.id)}
+                        className="p-1 rounded text-rose-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/20 transition-all cursor-pointer inline-flex items-center justify-center"
+                        title="Apagar este lançamento"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </td>
                   </tr>
                 );
               })}

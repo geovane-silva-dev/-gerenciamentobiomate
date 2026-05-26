@@ -49,6 +49,35 @@ export default function ProductsView() {
     });
   }, [products, searchTerm, categoryFilter]);
 
+  // Group products by category
+  const productsByCategory = useMemo(() => {
+    const groups: { category: { id: string; name: string; description?: string } | null; products: Product[] }[] = [];
+
+    // For each category, get its matching products
+    categories.forEach(cat => {
+      const catProducts = filteredProducts.filter(p => p.categoryId === cat.id);
+      if (catProducts.length > 0) {
+        groups.push({ category: cat, products: catProducts });
+      }
+    });
+
+    // Also get products that do not belong to any valid category (unassigned / cleared category)
+    const validCategoryIds = new Set(categories.map(c => c.id));
+    const unassignedProducts = filteredProducts.filter(p => !p.categoryId || !validCategoryIds.has(p.categoryId));
+    if (unassignedProducts.length > 0) {
+      groups.push({
+        category: {
+          id: 'unassigned',
+          name: 'Sem Categoria Definida',
+          description: 'Produtos temporariamente desvinculados ou que pertenciam a categorias excluídas.'
+        },
+        products: unassignedProducts
+      });
+    }
+
+    return groups;
+  }, [categories, filteredProducts]);
+
   const handleOpenAdd = () => {
     setEditingId(null);
     setName('');
@@ -181,106 +210,126 @@ export default function ProductsView() {
         </div>
       </div>
 
-      {/* Modern Catalog Table */}
-      <div className="bg-white dark:bg-[#122c24] rounded-2xl border border-emerald-900/5 dark:border-emerald-800/10 shadow-sm overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="bg-[#F0FAF7] dark:bg-emerald-950/50 text-gray-500 dark:text-emerald-300 text-xs font-bold uppercase border-b border-emerald-900/5 dark:border-emerald-800/20">
-                <th className="p-4 w-16 text-center">Ícone</th>
-                <th className="p-4">Produto</th>
-                <th className="p-4">SKU</th>
-                <th className="p-4">Categoria</th>
-                <th className="p-4">Preço Custo</th>
-                <th className="p-4">Preço Venda</th>
-                <th className="p-4 text-center">Quantidade Atual / Mínima</th>
-                <th className="p-4 text-right">Ações</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredProducts.length === 0 ? (
-                <tr>
-                  <td colSpan={8} className="p-8 text-center text-gray-400 dark:text-emerald-400/50 text-sm">
-                    Nenhum produto cadastrado no BIOMATE atende a esses filtros de pesquisa.
-                  </td>
-                </tr>
-              ) : (
-                filteredProducts.map(p => {
-                  const cat = categories.find(c => c.id === p.categoryId);
-                  const isLow = p.stock <= p.minStock;
-                  return (
-                    <tr
-                      key={p.id}
-                      className="border-b border-emerald-900/5 dark:border-emerald-800/10 hover:bg-[#F0FAF7]/40 dark:hover:bg-emerald-950/20 text-sm text-gray-700 dark:text-emerald-100 transition-colors"
-                    >
-                      <td className="p-4 text-center text-xl bg-[#F8FDFC] dark:bg-emerald-950/10">{p.imageUrl || '🧪'}</td>
-                      <td className="p-4 font-bold text-gray-800 dark:text-white">
-                        <div className="flex flex-col">
-                          <span>{p.name}</span>
-                          <div className="flex items-center gap-2 mt-1">
-                            <span className="text-[10px] text-gray-400 font-normal">Unid: {p.unit}</span>
-                            <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-full ${
-                              p.productType === 'Insumo' 
-                                ? 'bg-amber-100 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 border border-amber-200 dark:border-amber-900/30' 
-                                : p.productType === 'Ambos' 
-                                  ? 'bg-purple-100 dark:bg-purple-950/40 text-purple-600 dark:text-purple-400 border border-purple-200 dark:border-purple-900/30' 
-                                  : 'bg-sky-100 dark:bg-sky-950/40 text-sky-600 dark:text-sky-450 border border-sky-200 dark:border-sky-900/30'
-                            }`}>
-                              {p.productType || 'Produto Final'}
-                            </span>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="p-4 font-mono text-xs">{p.sku}</td>
-                      <td className="p-4">
-                        <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 border border-emerald-500/10">
-                          {cat ? cat.name : 'N/D'}
-                        </span>
-                      </td>
-                      <td className="p-4 font-mono font-medium text-amber-800 dark:text-amber-400">
-                        {formatBRL(p.costPrice, hideValues)}
-                      </td>
-                      <td className="p-4 font-mono font-bold text-[#00965e] dark:text-[#00C984]">
-                        {formatBRL(p.price, hideValues)}
-                      </td>
-                      <td className="p-4 text-center">
-                        <div className="flex items-center justify-center gap-1.5">
-                          <span className={`font-mono font-bold ${isLow ? 'text-amber-600' : 'text-gray-800 dark:text-white'}`}>
-                            {p.stock}
-                          </span>
-                          <span className="text-gray-400 text-xs">/ {p.minStock} {p.unit}</span>
-                          {isLow && (
-                            <span className="w-5 h-5 bg-amber-100 dark:bg-amber-950/40 rounded-full flex items-center justify-center text-amber-500 text-xs" title="Estoque crítico">
-                              ⚠️
-                            </span>
-                          )}
-                        </div>
-                      </td>
-                      <td className="p-4 text-right">
-                        <div className="flex items-center justify-end gap-2">
-                          <button
-                            onClick={() => handleOpenEdit(p)}
-                            className="p-1.5 rounded-lg text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 transition-all cursor-pointer"
-                            title="Editar produto"
+      {/* Grouped Catalog View By Category */}
+      <div className="space-y-8 animate-fade-in">
+        {productsByCategory.length === 0 ? (
+          <div className="bg-white dark:bg-[#122c24] p-12 text-center text-gray-400 dark:text-emerald-400/50 rounded-2xl border border-emerald-900/5 dark:border-emerald-800/10 shadow-sm">
+            Nenhum produto cadastrado no BIOMATE atende a esses filtros de pesquisa.
+          </div>
+        ) : (
+          productsByCategory.map(({ category, products: groupProds }) => {
+            return (
+              <div 
+                key={category?.id} 
+                className="bg-white dark:bg-[#122c24] rounded-3xl border border-emerald-900/5 dark:border-emerald-800/15 shadow-sm p-6 space-y-4"
+              >
+                {/* Category Group Header */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-gray-100 dark:border-emerald-950/60 pb-3 gap-2">
+                  <div className="space-y-0.5">
+                    <div className="flex items-center gap-2">
+                      <span className="text-base font-bold text-gray-800 dark:text-emerald-50">
+                        {category?.name}
+                      </span>
+                      <span className="text-[10px] font-extrabold px-2.5 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/60 text-emerald-800 dark:text-[#00C984] border border-[#00C984]/15">
+                        {groupProds.length} {groupProds.length === 1 ? 'item' : 'itens'}
+                      </span>
+                    </div>
+                    {category?.description && (
+                      <p className="text-xs text-gray-400 dark:text-[#8A9F9A] max-w-2xl leading-relaxed">
+                        {category.description}
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                {/* Sub-table for this category */}
+                <div className="overflow-x-auto rounded-xl border border-emerald-500/5 dark:border-emerald-950">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="bg-[#F0FAF7] dark:bg-emerald-950/30 text-gray-500 dark:text-emerald-300 text-xs font-bold uppercase border-b border-light-900/10 dark:border-emerald-800/20">
+                        <th className="p-3 w-16 text-center">Ícone</th>
+                        <th className="p-3">Produto</th>
+                        <th className="p-3 font-mono">SKU</th>
+                        <th className="p-3">P. Custo</th>
+                        <th className="p-3">P. Venda</th>
+                        <th className="p-3 text-center">Quantidade Atual / Mínima</th>
+                        <th className="p-3 text-right">Ações</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {groupProds.map(p => {
+                        const isLow = p.stock <= p.minStock;
+                        return (
+                          <tr
+                            key={p.id}
+                            className="border-b border-emerald-900/5 dark:border-emerald-800/10 hover:bg-[#F0FAF7]/40 dark:hover:bg-emerald-950/20 text-sm text-gray-700 dark:text-emerald-100 transition-colors"
                           >
-                            <Pencil className="w-4 h-4" />
-                          </button>
-                          <button
-                            onClick={() => handleDelete(p.id, p.name)}
-                            className="p-1.5 rounded-lg text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/20 transition-all cursor-pointer"
-                            title="Excluir produto"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
+                            <td className="p-3 text-center text-xl bg-[#F8FDFC] dark:bg-emerald-950/10 rounded-l-lg">{p.imageUrl || '🧪'}</td>
+                            <td className="p-3 font-bold text-gray-800 dark:text-white">
+                              <div className="flex flex-col">
+                                <span>{p.name}</span>
+                                <div className="flex items-center gap-2 mt-1">
+                                  <span className="text-[10px] text-gray-400 font-normal">Unid: {p.unit}</span>
+                                  <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-full ${
+                                    p.productType === 'Insumo' 
+                                      ? 'bg-amber-100 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 border border-amber-200 dark:border-amber-900/30' 
+                                      : p.productType === 'Ambos' 
+                                        ? 'bg-purple-100 dark:bg-purple-950/40 text-purple-600 dark:text-purple-400 border border-purple-200 dark:border-purple-900/30' 
+                                        : 'bg-sky-100 dark:bg-sky-950/40 text-sky-600 dark:text-sky-455 border border-sky-100 dark:border-sky-900/30'
+                                  }`}>
+                                    {p.productType || 'Produto Final'}
+                                  </span>
+                                </div>
+                              </div>
+                            </td>
+                            <td className="p-3 font-mono text-xs">{p.sku}</td>
+                            <td className="p-3 font-mono font-medium text-amber-800 dark:text-amber-400">
+                              {formatBRL(p.costPrice, hideValues)}
+                            </td>
+                            <td className="p-3 font-mono font-bold text-[#00965e] dark:text-[#00C984]">
+                              {formatBRL(p.price, hideValues)}
+                            </td>
+                            <td className="p-3 text-center">
+                              <div className="flex items-center justify-center gap-1.5">
+                                <span className={`font-mono font-bold ${isLow ? 'text-amber-600' : 'text-gray-800 dark:text-white'}`}>
+                                  {p.stock}
+                                </span>
+                                <span className="text-gray-400 text-xs">/ {p.minStock} {p.unit}</span>
+                                {isLow && (
+                                  <span className="w-5 h-5 bg-amber-100 dark:bg-amber-950/40 rounded-full flex items-center justify-center text-amber-500 text-xs animate-bounce" title="Estoque crítico">
+                                    ⚠️
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+                            <td className="p-3 text-right rounded-r-lg">
+                              <div className="flex items-center justify-end gap-2">
+                                <button
+                                  onClick={() => handleOpenEdit(p)}
+                                  className="p-1.5 rounded-lg text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 transition-all cursor-pointer"
+                                  title="Editar produto"
+                                >
+                                  <Pencil className="w-4 h-4" />
+                                </button>
+                                <button
+                                  onClick={() => handleDelete(p.id, p.name)}
+                                  className="p-1.5 rounded-lg text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/20 transition-all cursor-pointer"
+                                  title="Excluir produto"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            );
+          })
+        )}
       </div>
 
       {/* CRUD Add/Edit Product Modal */}

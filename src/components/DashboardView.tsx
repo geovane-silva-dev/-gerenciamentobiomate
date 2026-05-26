@@ -8,7 +8,14 @@ import {
   ArrowDownRight,
   User,
   AlertTriangle,
-  Info
+  Info,
+  Bell,
+  Trash2,
+  Plus,
+  Pin,
+  CheckCircle2,
+  AlertOctagon,
+  FileQuestion
 } from 'lucide-react';
 import {
   AreaChart,
@@ -29,6 +36,7 @@ export default function DashboardView() {
     products,
     expenses,
     productionBatches,
+    recipes,
     hideValues,
     showProductionCostToggle,
     setShowProductionCostToggle,
@@ -37,6 +45,61 @@ export default function DashboardView() {
     clientFilter,
     setClientFilter
   } = useBiomate();
+
+  // Custom Announcements/Mural state
+  const [customAnnouncements, setCustomAnnouncements] = React.useState<{
+    id: string;
+    text: string;
+    date: string;
+    priority: 'info' | 'warning' | 'error';
+  }[]>(() => {
+    const saved = localStorage.getItem('biomate_custom_announcements');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        return [];
+      }
+    }
+    return [
+      {
+        id: 'seed-1',
+        text: 'Aferição periódica dos termômetros das geladeiras programada para sexta-feira.',
+        date: new Date().toLocaleDateString('pt-BR'),
+        priority: 'info' as const
+      },
+      {
+        id: 'seed-2',
+        text: 'Lote de Kombucha Alquimia Verde necessita de revisão do pH antes do envase final.',
+        date: new Date().toLocaleDateString('pt-BR'),
+        priority: 'warning' as const
+      }
+    ];
+  });
+
+  const [newAnnounceText, setNewAnnounceText] = React.useState('');
+  const [newAnnouncePriority, setNewAnnouncePriority] = React.useState<'info' | 'warning' | 'error'>('info');
+
+  React.useEffect(() => {
+    localStorage.setItem('biomate_custom_announcements', JSON.stringify(customAnnouncements));
+  }, [customAnnouncements]);
+
+  const handleAddAnnouncement = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newAnnounceText.trim()) return;
+    const item = {
+      id: 'custom-' + Date.now(),
+      text: newAnnounceText.trim(),
+      date: new Date().toLocaleDateString('pt-BR'),
+      priority: newAnnouncePriority
+    };
+    setCustomAnnouncements(prev => [item, ...prev]);
+    setNewAnnounceText('');
+  };
+
+  const handleDeleteAnnouncement = (id: string) => {
+    setCustomAnnouncements(prev => prev.filter(item => item.id !== id));
+  };
 
   // All unique clients list
   const clientList = useMemo(() => {
@@ -80,10 +143,25 @@ export default function DashboardView() {
     };
   }, [filteredSales, products, expenses, showProductionCostToggle, showFixedExpensesToggle]);
 
-  // Low stock alert products calculation
-  const lowStockProducts = useMemo(() => {
-    return products.filter(p => p.stock <= p.minStock);
+  // Out of stock items (Stock exactly 0)
+  const outOfStockProducts = useMemo(() => {
+    return products.filter(p => p.stock === 0);
   }, [products]);
+
+  // Low stock alert products calculation (Stock below target but > 0)
+  const lowStockProducts = useMemo(() => {
+    return products.filter(p => p.stock > 0 && p.stock <= p.minStock);
+  }, [products]);
+
+  // Products with no configured recipe/formula (important alert)
+  const productsWithoutRecipe = useMemo(() => {
+    return products.filter(p => {
+      const isFinalOrAmbos = !p.productType || p.productType === 'Produto Final' || p.productType === 'Ambos';
+      if (!isFinalOrAmbos) return false;
+      const hasRecipe = recipes.some(r => r.productId === p.id);
+      return !hasRecipe;
+    });
+  }, [products, recipes]);
 
   // Recharts Chart Data Generation (Grouping by date in a sequential line)
   const chartData = useMemo(() => {
@@ -283,22 +361,201 @@ export default function DashboardView() {
         </div>
       </div>
 
-      {/* Critical Stock Alert notification bar */}
-      {lowStockProducts.length > 0 && (
-        <div className="bg-amber-50/80 dark:bg-amber-950/20 text-amber-800 dark:text-amber-300 p-4 rounded-2xl border border-amber-200/50 dark:border-amber-900/40 flex items-start gap-3.5 shadow-sm animate-pulse">
-          <AlertTriangle className="w-5.5 h-5.5 text-amber-500 shrink-0 mt-0.5" />
+      {/* Central de Alertas e Avisos / Mural do Painel */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Lado Esquerdo: Alertas Operacionais Automáticos (Inventário e Cadastros) */}
+        <div className="bg-white dark:bg-[#122c24] p-5 rounded-[28px] border border-emerald-900/5 dark:border-emerald-800/10 shadow-sm flex flex-col justify-between">
           <div>
-            <h4 className="font-bold text-sm">Alerta de Baixo Estoque Operacional!</h4>
-            <p className="text-xs text-amber-700/90 dark:text-amber-400/80 mt-1">
-              Os seguintes insumos ecológicos estão abaixo do patamar de segurança de armazenamento:{' '}
-              <span className="font-bold">
-                {lowStockProducts.map(p => `${p.name} (${p.stock} ${p.unit})`).join(', ')}
-              </span>
-              . Providencie novos lotes na página de <span className="underline font-bold">Produção</span>.
-            </p>
+            <div className="flex items-center gap-2.5 mb-4 pb-3 border-b border-slate-100 dark:border-emerald-950">
+              <div className="p-1.5 bg-rose-500/10 text-rose-600 dark:text-rose-400 rounded-lg">
+                <Bell className="w-5 h-5 animate-bounce" />
+              </div>
+              <div>
+                <h4 className="font-bold text-sm text-slate-800 dark:text-emerald-100 font-sans">Alertas Operacionais Automáticos</h4>
+                <p className="text-[10px] text-slate-400 dark:text-slate-400 font-medium">Verificação automática do sistema de estoque e processos</p>
+              </div>
+            </div>
+
+            <div className="space-y-3 max-h-[290px] overflow-y-auto pr-1">
+              {/* 1. Sem estoque (Estoque Zerado) */}
+              {outOfStockProducts.length > 0 && (
+                <div className="flex items-start gap-3 p-3 rounded-xl bg-red-50 dark:bg-red-950/20 border border-red-250/35 dark:border-red-900/30 text-rose-900 dark:text-rose-200">
+                  <AlertOctagon className="w-5 h-5 text-rose-600 dark:text-rose-400 shrink-0 mt-0.5" />
+                  <div className="text-xs">
+                    <div className="flex items-center gap-1.5 mb-1 flex-wrap">
+                      <span className="font-extrabold uppercase text-[8px] tracking-wider px-1.5 py-0.5 bg-rose-600 text-white rounded">FALTA CRÍTICA</span>
+                      <span className="font-bold text-red-700 dark:text-red-300">Estoque Insumo Zerado!</span>
+                    </div>
+                    <p className="text-slate-600 dark:text-slate-300">
+                      Os seguintes produtos têm estoque esgotado: <span className="font-semibold text-rose-600 dark:text-rose-400">{outOfStockProducts.map(p => p.name).join(', ')}</span>. Isso prejudica imediatamente a confecção de receitas.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* 2. Estoque Baixo */}
+              {lowStockProducts.length > 0 && (
+                <div className="flex items-start gap-3 p-3 rounded-xl bg-amber-50 dark:bg-amber-950/20 border border-amber-250/35 dark:border-amber-900/30 text-amber-900 dark:text-amber-250">
+                  <AlertTriangle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
+                  <div className="text-xs">
+                    <div className="flex items-center gap-1.5 mb-1 flex-wrap">
+                      <span className="font-extrabold uppercase text-[8px] tracking-wider px-1.5 py-0.5 bg-amber-500 text-slate-900 rounded">ESTOQUE BAIXO</span>
+                      <span className="font-bold text-amber-800 dark:text-amber-300">Abaixo do Nível Mínimo!</span>
+                    </div>
+                    <p className="text-slate-600 dark:text-amber-400/80">
+                      Os insumos ecológicos a seguir estão sob segurança reduzida: <span className="font-semibold">{lowStockProducts.map(p => `${p.name} (${p.stock} ${p.unit})`).join(', ')}</span>. Providencie um novo lote.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* 3. Cadastro sem Fórmulas/Receitas */}
+              {productsWithoutRecipe.length > 0 && (
+                <div className="flex items-start gap-3 p-3 rounded-xl bg-slate-50 dark:bg-slate-900/40 border border-slate-200/50 dark:border-emerald-950 text-slate-700 dark:text-emerald-300">
+                  <FileQuestion className="w-5 h-5 text-[#8A9F9A] shrink-0 mt-0.5" />
+                  <div className="text-xs">
+                    <div className="flex items-center gap-1.5 mb-1 flex-wrap">
+                      <span className="font-extrabold uppercase text-[8px] tracking-wider px-1.5 py-0.5 bg-slate-200 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded">FÓRMULA AUSENTE</span>
+                      <span className="font-bold text-slate-850 dark:text-emerald-200">Sem Receita Conectada!</span>
+                    </div>
+                    <p className="text-slate-500 dark:text-emerald-400/75">
+                      Os seguintes produtos finais não possuem receitas configuradas: <span className="font-semibold">{productsWithoutRecipe.map(p => p.name).join(', ')}</span>. Configure-os na tela de Receitas para calcular os custos.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* Tudo perfeito */}
+              {outOfStockProducts.length === 0 && lowStockProducts.length === 0 && productsWithoutRecipe.length === 0 && (
+                <div className="flex flex-col items-center justify-center py-10 px-4 text-center text-slate-400 dark:text-emerald-500/60">
+                  <CheckCircle2 className="w-12 h-12 text-emerald-500 mb-2" />
+                  <span className="font-bold text-sm text-slate-700 dark:text-emerald-100">Tudo sob controle no estoque!</span>
+                  <p className="text-xs text-slate-400 dark:text-emerald-500/50 mt-1 max-w-sm">Nenhum aviso ou inconformidade de nível crítico ou mínimo foi detectado no sistema.</p>
+                </div>
+              )}
+            </div>
+          </div>
+          <div className="mt-3 text-[10px] text-right font-medium text-slate-400 dark:text-[#8A9F9A]">
+            Verificação: ERP Biomate Ativo
           </div>
         </div>
-      )}
+
+        {/* Lado Direito: Mural de Avisos Manuais do Gestor / Coleção de Recados */}
+        <div className="bg-white dark:bg-[#122c24] p-5 rounded-[28px] border border-emerald-900/5 dark:border-emerald-800/10 shadow-sm flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between mb-4 pb-3 border-b border-slate-100 dark:border-emerald-950">
+              <div className="flex items-center gap-2.5">
+                <div className="p-1.5 bg-amber-500/10 text-amber-600 rounded-lg">
+                  <Pin className="w-5 h-5 text-amber-550" />
+                </div>
+                <div>
+                  <h4 className="font-bold text-sm text-slate-800 dark:text-emerald-100 font-sans">Mural de Recados Internos</h4>
+                  <p className="text-[10px] text-slate-400 dark:text-slate-400 font-medium font-mono">Mensagens fixadas e anotações administrativas</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Form de adicionar recado */}
+            <form onSubmit={handleAddAnnouncement} className="mb-4 bg-slate-50/50 dark:bg-[#0d1f1b] p-2.5 rounded-2xl border border-slate-100 dark:border-emerald-950/40 flex flex-col gap-2">
+              <input
+                type="text"
+                placeholder="Escreva um recado ou instrução..."
+                value={newAnnounceText}
+                onChange={(e) => setNewAnnounceText(e.target.value)}
+                className="w-full px-3 py-1.5 text-xs text-slate-800 dark:text-[#E6F9F2] bg-white dark:bg-slate-900 border border-slate-200 dark:border-emerald-900/30 rounded-xl focus:outline-none focus:ring-1 focus:ring-emerald-500"
+              />
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[10px] font-bold text-slate-400 dark:text-emerald-400/50 mr-1">Prioridade:</span>
+                  {(['info', 'warning', 'error'] as const).map(p => {
+                    const labelMap = { info: 'Normal', warning: 'Atenção', error: 'Urgente' };
+                    const colorMap = {
+                      info: 'bg-blue-50 dark:bg-blue-950/30 text-blue-600 dark:text-blue-400 border-blue-200 dark:border-blue-900/30',
+                      warning: 'bg-amber-50 dark:bg-amber-950/30 text-amber-600 dark:text-amber-400 border-amber-200 dark:border-amber-900/30',
+                      error: 'bg-red-50 dark:bg-red-950/30 text-red-500 dark:text-red-400 border-red-200 dark:border-red-900/30'
+                    };
+                    const isActive = newAnnouncePriority === p;
+                    return (
+                      <button
+                        key={p}
+                        type="button"
+                        onClick={() => setNewAnnouncePriority(p)}
+                        className={`text-[9px] font-extrabold px-2 py-0.5 rounded-lg border select-none transition-all cursor-pointer ${
+                          isActive
+                            ? `${colorMap[p]} ring-1 ring-emerald-500 font-black`
+                            : 'bg-transparent text-slate-400 dark:text-emerald-500/50 border-slate-200 dark:border-emerald-900/20'
+                        }`}
+                      >
+                        {labelMap[p]}
+                      </button>
+                    );
+                  })}
+                </div>
+                <button
+                  type="submit"
+                  className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold px-3 py-1 rounded-xl flex items-center gap-1 cursor-pointer transition-all shadow-xs"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Fixar</span>
+                </button>
+              </div>
+            </form>
+
+            <div className="space-y-2 max-h-[160px] overflow-y-auto pr-1">
+              {customAnnouncements.length === 0 ? (
+                <div className="text-center py-6 text-xs text-slate-450 dark:text-[#8A9F9A]/40 italic">
+                  Nenhum aviso fixado no momento. Use o campo acima para criar lembretes!
+                </div>
+              ) : (
+                customAnnouncements.map(item => {
+                  const borderPriorityClass =
+                    item.priority === 'error'
+                      ? 'border-l-rose-500 dark:border-l-rose-600'
+                      : item.priority === 'warning'
+                      ? 'border-l-amber-500'
+                      : 'border-l-blue-400';
+                  const badgeText = item.priority === 'error' ? 'Urgente' : item.priority === 'warning' ? 'Atenção' : 'Aviso';
+                  const badgeColor =
+                    item.priority === 'error'
+                      ? 'bg-rose-100 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 border border-rose-200/20'
+                      : item.priority === 'warning'
+                      ? 'bg-amber-100 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 border border-amber-200/20'
+                      : 'bg-blue-100 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 border border-blue-200/20';
+                  return (
+                    <div
+                      key={item.id}
+                      className={`p-2.5 rounded-xl bg-slate-50/75 dark:bg-[#0a1b18]/60 border border-slate-100 dark:border-emerald-950 border-l-4 ${borderPriorityClass} text-xs flex items-start justify-between gap-2.5 shadow-2xs group`}
+                    >
+                      <div className="space-y-0.5">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className={`text-[8px] font-bold uppercase px-1 py-px rounded ${badgeColor}`}>
+                            {badgeText}
+                          </span>
+                          <span className="text-[9px] text-slate-400 font-medium">{item.date}</span>
+                        </div>
+                        <p className="text-slate-705 dark:text-slate-300 text-[11px] font-medium leading-relaxed">
+                          {item.text}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteAnnouncement(item.id)}
+                        className="p-1 rounded text-slate-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-all cursor-pointer inline-flex items-center justify-center shrink-0"
+                        title="Remover aviso"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+          <div className="mt-2 text-[9px] text-[#8A9F9A] italic">
+            * Notas criadas de forma local e visíveis apenas nesta sessão.
+          </div>
+        </div>
+      </div>
 
       {/* COMPARATIVO DE MÉTRICAS - Recharts section exactly like inside picture */}
       <div className="bg-white dark:bg-[#122c24] p-6 sm:p-8 rounded-[32px] border border-emerald-900/5 dark:border-emerald-800/10 shadow-sm">
