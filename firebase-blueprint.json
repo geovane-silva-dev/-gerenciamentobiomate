@@ -114,9 +114,26 @@
         "responsible": { "type": "string" }
       },
       "required": ["id", "recipeId", "productId", "quantityProduced", "totalCost", "date", "responsible"]
+    },
+    "User": {
+      "title": "User",
+      "description": "Basic authenticated user credentials",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "email": { "type": "string" },
+        "displayName": { "type": "string" },
+        "photoURL": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["id", "email", "displayName", "photoURL", "updatedAt"]
     }
   },
   "firestore": {
+    "users": {
+      "schema": "User",
+      "description": "Access to customer and provider authentication records"
+    },
     "categories": {
       "schema": "Category",
       "description": "Access to product categories"

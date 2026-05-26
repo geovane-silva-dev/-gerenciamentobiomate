@@ -68,6 +68,8 @@ interface BiomateContextType {
   signInWithGoogle: () => Promise<void>;
   logout: () => Promise<void>;
   isCloudReady: boolean;
+  authLoading: boolean;
+  authError: string | null;
 
   // Custom accessible modal confirmation helpers
   confirmConfig: {
@@ -294,6 +296,8 @@ export const BiomateProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => auth.currentUser !== null);
   const [currentUser, setCurrentUser] = useState<any>(auth.currentUser);
   const [isCloudReady, setIsCloudReady] = useState<boolean>(false);
+  const [authLoading, setAuthLoading] = useState<boolean>(false);
+  const [authError, setAuthError] = useState<string | null>(null);
 
   // Accessible custom confirmation modal states
   const [confirmConfig, setConfirmConfig] = useState<{
@@ -342,28 +346,106 @@ export const BiomateProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }
   };
 
+  // Save user profile state
+  const saveUserProfile = async (user: any) => {
+    if (isMockFirebase || !user) return;
+    try {
+      const { setDoc, doc } = await import('firebase/firestore');
+      const userProfile = {
+        id: user.uid,
+        email: user.email || '',
+        displayName: user.displayName || '',
+        photoURL: user.photoURL || '',
+        updatedAt: new Date().toISOString()
+      };
+      await setDoc(doc(db, 'users', user.uid), userProfile);
+      console.log("User profile saved successfully in Firestore users collection.");
+    } catch (err: any) {
+      console.warn("Could not save user profile to Firestore users collection:", err);
+    }
+  };
+
   // Google Authentication actions
   const signInWithGoogle = async () => {
-    if (isMockFirebase) return;
+    if (isMockFirebase) {
+      setAuthError("Firebase está em modo mock.");
+      return;
+    }
+    setAuthLoading(true);
+    setAuthError(null);
     try {
-      const { GoogleAuthProvider, signInWithPopup } = await import('firebase/auth');
+      const { GoogleAuthProvider, signInWithPopup, signInWithRedirect } = await import('firebase/auth');
       const provider = new GoogleAuthProvider();
       provider.setCustomParameters({ prompt: 'select_account' });
-      await signInWithPopup(auth, provider);
-    } catch (error) {
-      console.error("Google sign-in failed:", error);
+      
+      console.log("Attempting Google Sign-In with popup...");
+      try {
+        const result = await signInWithPopup(auth, provider);
+        console.log("Successfully logged in with Google Popup:", result.user);
+        await saveUserProfile(result.user);
+        setAuthLoading(false);
+      } catch (popupError: any) {
+        console.warn("Popup blocked or failed. Attempting fallback with signInWithRedirect:", popupError);
+        
+        let customErrorMsg = `Popup falhou (${popupError.code || popupError.message}). `;
+        
+        if (popupError.code === 'auth/unauthorized-domain') {
+          customErrorMsg = `Domínio não autorizado. Adicione "${window.location.hostname}" no Firebase Console -> Authentication -> Domínios Autorizados. `;
+        }
+        
+        setAuthError(customErrorMsg + "Redirecionando para login seguro...");
+        
+        // Dynamic fallback fallback to redirect
+        await signInWithRedirect(auth, provider);
+      }
+    } catch (error: any) {
+      console.error("Google Authentication flow failed:", error);
+      setAuthError(error.message || String(error));
+      setAuthLoading(false);
     }
   };
 
   const logout = async () => {
     if (isMockFirebase) return;
+    setAuthLoading(true);
+    setAuthError(null);
     try {
       const { signOut } = await import('firebase/auth');
       await signOut(auth);
-    } catch (error) {
+      console.log("User logged out successfully.");
+    } catch (error: any) {
       console.error("Logout failed:", error);
+      setAuthError(error.message || String(error));
+    } finally {
+      setAuthLoading(false);
     }
   };
+
+  // Check for Redirect Result on boot
+  useEffect(() => {
+    if (isMockFirebase) return;
+    const checkRedirect = async () => {
+      try {
+        const { getRedirectResult } = await import('firebase/auth');
+        setAuthLoading(true);
+        const result = await getRedirectResult(auth);
+        if (result?.user) {
+          console.log("Google session restored via redirect:", result.user);
+          await saveUserProfile(result.user);
+        }
+      } catch (err: any) {
+        console.error("Error retrieving redirect auth result:", err);
+        if (err.code === 'auth/unauthorized-domain') {
+          setAuthError(`Domínio não autorizado. Adicione "${window.location.hostname}" nas configurações do Firebase Console.`);
+        } else {
+          setAuthError(`Falha no redirecionamento: ${err.message || String(err)}`);
+        }
+      } finally {
+        setAuthLoading(false);
+      }
+    };
+    checkRedirect();
+  }, [isMockFirebase]);
 
   // Seed default data or upload local data of user to Firestore if it is a real connection and Firestore is completely empty
   useEffect(() => {
@@ -410,11 +492,19 @@ export const BiomateProvider: React.FC<{ children: React.ReactNode }> = ({ child
       if (user) {
         setIsAuthenticated(true);
         setCurrentUser(user);
+        // Sync user details to Firestore if signed in with Google
+        if (user && !user.isAnonymous) {
+          saveUserProfile(user);
+        }
       } else {
         setIsAuthenticated(false);
         setCurrentUser(null);
-        signInAnonymously(auth).catch((err) => {
+        setAuthLoading(true);
+        signInAnonymously(auth).then(() => {
+          setAuthLoading(false);
+        }).catch((err) => {
           console.warn("Anonymous sign-in not enabled or failed:", err);
+          setAuthLoading(false);
         });
       }
     });
@@ -1011,6 +1101,8 @@ export const BiomateProvider: React.FC<{ children: React.ReactNode }> = ({ child
       signInWithGoogle,
       logout,
       isCloudReady,
+      authLoading,
+      authError,
       confirmConfig,
       confirmAction,
       closeConfirm
