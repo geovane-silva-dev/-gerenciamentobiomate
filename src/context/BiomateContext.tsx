@@ -62,6 +62,13 @@ interface BiomateContextType {
 
   resetDatabase: () => void;
 
+  // Authentication & Cloud Sync
+  isAuthenticated: boolean;
+  currentUser: any;
+  signInWithGoogle: () => Promise<void>;
+  logout: () => Promise<void>;
+  isCloudReady: boolean;
+
   // Custom accessible modal confirmation helpers
   confirmConfig: {
     title: string;
@@ -285,6 +292,8 @@ export const BiomateProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const [showFixedExpensesToggle, setShowFixedExpensesToggle] = useState<boolean>(true);
   const [clientFilter, setClientFilter] = useState<string>('all');
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => auth.currentUser !== null);
+  const [currentUser, setCurrentUser] = useState<any>(auth.currentUser);
+  const [isCloudReady, setIsCloudReady] = useState<boolean>(false);
 
   // Accessible custom confirmation modal states
   const [confirmConfig, setConfirmConfig] = useState<{
@@ -333,52 +342,77 @@ export const BiomateProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }
   };
 
-  // Seed default data to Firestore if it is a real connection and is empty
+  // Google Authentication actions
+  const signInWithGoogle = async () => {
+    if (isMockFirebase) return;
+    try {
+      const { GoogleAuthProvider, signInWithPopup } = await import('firebase/auth');
+      const provider = new GoogleAuthProvider();
+      provider.setCustomParameters({ prompt: 'select_account' });
+      await signInWithPopup(auth, provider);
+    } catch (error) {
+      console.error("Google sign-in failed:", error);
+    }
+  };
+
+  const logout = async () => {
+    if (isMockFirebase) return;
+    try {
+      const { signOut } = await import('firebase/auth');
+      await signOut(auth);
+    } catch (error) {
+      console.error("Logout failed:", error);
+    }
+  };
+
+  // Seed default data or upload local data of user to Firestore if it is a real connection and Firestore is completely empty
   useEffect(() => {
-    const seedFirestoreIfEmpty = async () => {
-      if (isMockFirebase || !isAuthenticated) return;
+    const seedOrUploadLocalToFirestore = async () => {
+      if (isMockFirebase || !isAuthenticated) {
+        setIsCloudReady(true);
+        return;
+      }
       try {
         const { getDocs, query, limit } = await import('firebase/firestore');
         const snap = await getDocs(query(collection(db, 'categories'), limit(1)));
         if (snap.empty) {
-          console.log("Seeding default data to Firestore...");
-          for (const cat of DEFAULT_CATEGORIES) {
-            await setDoc(doc(db, 'categories', cat.id), cat);
-          }
-          for (const prod of DEFAULT_PRODUCTS) {
-            await setDoc(doc(db, 'products', prod.id), prod);
-          }
-          for (const sale of DEFAULT_SALES) {
-            await setDoc(doc(db, 'sales', sale.id), sale);
-          }
-          for (const exp of DEFAULT_EXPENSES) {
-            await setDoc(doc(db, 'expenses', exp.id), exp);
-          }
-          for (const pb of DEFAULT_PRODUCTION_BATCHES) {
-            await setDoc(doc(db, 'productionBatches', pb.id), pb);
-          }
-          for (const rec of DEFAULT_RECIPES) {
-            await setDoc(doc(db, 'recipes', rec.id), rec);
-          }
-          for (const slog of DEFAULT_SMART_LOGS) {
-            await setDoc(doc(db, 'smartProductionLogs', slog.id), slog);
-          }
-          console.log("Firestore seeding completed successfully!");
+          console.log("Firestore is completely empty. Uploading current state or default data...");
+          
+          const uploadColl = async (colName: string, items: any[]) => {
+            for (const item of items) {
+              await setDoc(doc(db, colName, item.id), item);
+            }
+          };
+
+          // Gracefully upload whatever is in the active state (loaded from localstorage or DEFAULTs)
+          await uploadColl('categories', categories.length > 0 ? categories : DEFAULT_CATEGORIES);
+          await uploadColl('products', products.length > 0 ? products : DEFAULT_PRODUCTS);
+          await uploadColl('sales', sales.length > 0 ? sales : DEFAULT_SALES);
+          await uploadColl('expenses', expenses.length > 0 ? expenses : DEFAULT_EXPENSES);
+          await uploadColl('productionBatches', productionBatches.length > 0 ? productionBatches : DEFAULT_PRODUCTION_BATCHES);
+          await uploadColl('recipes', recipes.length > 0 ? recipes : DEFAULT_RECIPES);
+          await uploadColl('smartProductionLogs', smartProductionLogs.length > 0 ? smartProductionLogs : DEFAULT_SMART_LOGS);
+          
+          console.log("Firestore seeding/upload completed successfully!");
         }
       } catch (error) {
-        console.warn("Seeding Firestore failed (likely unauthenticated or missing rules):", error);
+        console.warn("Seeding or uploading to Firestore failed (likely auth status or rules checks):", error);
+      } finally {
+        setIsCloudReady(true);
       }
     };
-    seedFirestoreIfEmpty();
+    seedOrUploadLocalToFirestore();
   }, [isMockFirebase, isAuthenticated]);
 
-  // Auth anonymous state
+  // Auth anonymous fallback state and state listeners
   useEffect(() => {
     const unsubAuth = onAuthStateChanged(auth, (user) => {
       if (user) {
         setIsAuthenticated(true);
+        setCurrentUser(user);
       } else {
         setIsAuthenticated(false);
+        setCurrentUser(null);
         signInAnonymously(auth).catch((err) => {
           console.warn("Anonymous sign-in not enabled or failed:", err);
         });
@@ -396,7 +430,7 @@ export const BiomateProvider: React.FC<{ children: React.ReactNode }> = ({ child
       snapshot.forEach(d => {
         list.push(d.data() as Category);
       });
-      if (list.length > 0) {
+      if (list.length > 0 || isCloudReady) {
         setCategories(list);
       }
     }, (err) => {
@@ -408,7 +442,7 @@ export const BiomateProvider: React.FC<{ children: React.ReactNode }> = ({ child
       snapshot.forEach(d => {
         list.push(d.data() as Product);
       });
-      if (list.length > 0) {
+      if (list.length > 0 || isCloudReady) {
         setProducts(list);
       }
     }, (err) => {
@@ -421,7 +455,7 @@ export const BiomateProvider: React.FC<{ children: React.ReactNode }> = ({ child
         list.push(d.data() as Sale);
       });
       list.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-      if (list.length > 0) {
+      if (list.length > 0 || isCloudReady) {
         setSales(list);
       }
     }, (err) => {
@@ -433,7 +467,7 @@ export const BiomateProvider: React.FC<{ children: React.ReactNode }> = ({ child
       snapshot.forEach(d => {
         list.push(d.data() as Expense);
       });
-      if (list.length > 0) {
+      if (list.length > 0 || isCloudReady) {
         setExpenses(list);
       }
     }, (err) => {
@@ -446,7 +480,7 @@ export const BiomateProvider: React.FC<{ children: React.ReactNode }> = ({ child
         list.push(d.data() as ProductionBatch);
       });
       list.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-      if (list.length > 0) {
+      if (list.length > 0 || isCloudReady) {
         setProductionBatches(list);
       }
     }, (err) => {
@@ -458,7 +492,7 @@ export const BiomateProvider: React.FC<{ children: React.ReactNode }> = ({ child
       snapshot.forEach(d => {
         list.push(d.data() as Recipe);
       });
-      if (list.length > 0) {
+      if (list.length > 0 || isCloudReady) {
         setRecipes(list);
       }
     }, (err) => {
@@ -471,7 +505,7 @@ export const BiomateProvider: React.FC<{ children: React.ReactNode }> = ({ child
         list.push(d.data() as SmartProductionLog);
       });
       list.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-      if (list.length > 0) {
+      if (list.length > 0 || isCloudReady) {
         setSmartProductionLogs(list);
       }
     }, (err) => {
@@ -487,7 +521,7 @@ export const BiomateProvider: React.FC<{ children: React.ReactNode }> = ({ child
       unsubRecipes();
       unsubSmartLogs();
     };
-  }, [isMockFirebase, isAuthenticated]);
+  }, [isMockFirebase, isAuthenticated, isCloudReady]);
 
   // Load from LocalStorage or seed with default data
   const [categories, setCategories] = useState<Category[]>(() => {
@@ -972,6 +1006,11 @@ export const BiomateProvider: React.FC<{ children: React.ReactNode }> = ({ child
       executeSmartProduction,
       deleteSmartProductionLog,
       resetDatabase,
+      isAuthenticated,
+      currentUser,
+      signInWithGoogle,
+      logout,
+      isCloudReady,
       confirmConfig,
       confirmAction,
       closeConfirm

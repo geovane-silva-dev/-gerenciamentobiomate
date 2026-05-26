@@ -17,7 +17,10 @@ import {
   Moon,
   Menu,
   X,
-  Sparkles
+  Sparkles,
+  Cloud,
+  Database,
+  Trash2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -30,7 +33,12 @@ export default function Sidebar() {
     darkMode,
     setDarkMode,
     resetDatabase,
-    confirmAction
+    confirmAction,
+    isAuthenticated,
+    currentUser,
+    signInWithGoogle,
+    logout,
+    isCloudReady
   } = useBiomate();
 
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -132,17 +140,82 @@ export default function Sidebar() {
           <span>Ocultar Valores</span>
         </button>
 
-        {/* Restart accounts database */}
+        {/* Redefinir Banco de Dados */}
         <button
           onClick={handleReset}
           className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-xs text-red-400/80 hover:bg-white/5 hover:text-red-400 transition-all uppercase"
           id="btn-reset-data"
         >
-          <LogOut className="w-4 h-4" />
-          <span>Sair da Conta</span>
+          <Trash2 className="w-4 h-4" />
+          <span>Redefinir Dados</span>
         </button>
 
-        <div className="pt-2 text-[9px] text-center text-emerald-100/25 tracking-wider">
+        {/* Cloud Status / Authentication Section */}
+        {!currentUser ? (
+          <div className="mt-4 p-3 bg-emerald-900/20 rounded-xl border border-emerald-500/10">
+            <div className="flex items-center gap-2 mb-1.5">
+              <span className="w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse" />
+              <span className="text-[10px] text-amber-300 font-semibold tracking-wider uppercase">Modo Local (Offline)</span>
+            </div>
+            <p className="text-[10px] text-emerald-100/50 mb-2.5 leading-relaxed">
+              Conserve e sincronize seus dados na nuvem para acessá-los em múltiplos aparelhos em tempo real.
+            </p>
+            <button
+              onClick={() => signInWithGoogle()}
+              className="w-full flex items-center justify-center gap-2 px-2.5 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-white font-medium rounded-lg text-[11px] transition-all shadow-md active:scale-[0.98]"
+              id="btn-google-signin"
+            >
+              <svg className="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
+                <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
+                <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22c-.62-.03-1.16-.16-1.68-.45l3.49-2.18z" fill="#FBBC05"/>
+                <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
+              </svg>
+              <span>Sincronizar com Google</span>
+            </button>
+          </div>
+        ) : (
+          <div className="mt-4 p-3 bg-emerald-900/40 rounded-xl border border-emerald-500/20">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                <span className="text-[10px] text-emerald-400 font-semibold tracking-wider uppercase">Sincronizado</span>
+              </div>
+              <button
+                onClick={() => logout()}
+                className="text-[10px] text-red-300 hover:text-red-200 transition-colors underline font-medium"
+                id="btn-logout-google"
+              >
+                Sair
+              </button>
+            </div>
+            
+            <div className="flex items-center gap-2">
+              {currentUser.photoURL ? (
+                <img
+                  src={currentUser.photoURL}
+                  referrerPolicy="no-referrer"
+                  alt="Profile"
+                  className="w-7 h-7 rounded-full border border-emerald-500/30 object-cover"
+                />
+              ) : (
+                <div className="w-7 h-7 bg-emerald-500 rounded-full flex items-center justify-center font-bold text-xs text-white uppercase shadow-md shrink-0">
+                  {currentUser.displayName ? currentUser.displayName[0] : (currentUser.email ? currentUser.email[0] : 'U')}
+                </div>
+              )}
+              <div className="overflow-hidden animate-fade-in">
+                <p className="text-[10px] font-semibold text-white truncate max-w-[140px]">
+                  {currentUser.displayName || 'Usuário BIOMATE'}
+                </p>
+                <p className="text-[9px] text-emerald-100/40 truncate max-w-[140px]">
+                  {currentUser.email || 'Conta vinculada'}
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        <div className="pt-2 text-[9px] text-center text-emerald-100/25 tracking-wider font-mono">
           BIOMATE ERP • PÁGINA PREMIUM
         </div>
       </div>
