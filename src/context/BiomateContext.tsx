@@ -296,6 +296,7 @@ export const BiomateProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => auth.currentUser !== null);
   const [currentUser, setCurrentUser] = useState<any>(auth.currentUser);
   const [isCloudReady, setIsCloudReady] = useState<boolean>(false);
+  const [authInitialized, setAuthInitialized] = useState<boolean>(false);
   const [authLoading, setAuthLoading] = useState<boolean>(false);
   const [authError, setAuthError] = useState<string | null>(null);
 
@@ -351,7 +352,7 @@ export const BiomateProvider: React.FC<{ children: React.ReactNode }> = ({ child
     if (isMockFirebase) return;
     try {
       const cleaned = cleanData(data);
-      console.log(`Writing document to Firestore: ${coll}/${id}`, cleaned);
+      console.log("Firestore Save:", cleaned);
       await setDoc(doc(db, coll, id), cleaned);
     } catch (error) {
       console.error(`Error saving document to Firestore at ${coll}/${id}:`, error);
@@ -362,7 +363,7 @@ export const BiomateProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const removeDoc = async (coll: string, id: string) => {
     if (isMockFirebase) return;
     try {
-      console.log(`Deleting document from Firestore: ${coll}/${id}`);
+      console.log("Firestore Delete:", id);
       await deleteDoc(doc(db, coll, id));
     } catch (error) {
       console.error(`Error deleting document from Firestore at ${coll}/${id}:`, error);
@@ -474,7 +475,18 @@ export const BiomateProvider: React.FC<{ children: React.ReactNode }> = ({ child
   // Seed default data or upload local data of user to Firestore if it is a real connection and Firestore is completely empty
   useEffect(() => {
     const syncDatabaseOnStart = async () => {
-      if (isMockFirebase || !isAuthenticated) {
+      if (isMockFirebase) {
+        setIsCloudReady(true);
+        return;
+      }
+      
+      // Wait until auth state is initially loaded/evaluated
+      if (!authInitialized) {
+        return;
+      }
+      
+      // If auth is resolved but the user is not authenticated, we transition to locally-ready mode
+      if (!isAuthenticated) {
         setIsCloudReady(true);
         return;
       }
@@ -483,6 +495,11 @@ export const BiomateProvider: React.FC<{ children: React.ReactNode }> = ({ child
       setAuthLoading(true);
       try {
         const { getDocs, query, collection, setDoc, doc } = await import('firebase/firestore');
+
+        // Check if database is completely brand new before we do any seeding
+        const categoriesSnap = await getDocs(query(collection(db, 'categories')));
+        const productsSnap = await getDocs(query(collection(db, 'products')));
+        const isBrandNewDb = categoriesSnap.empty && productsSnap.empty;
 
         // Helper to check and sync each collection individually so we never lose local data nor partial-write syncs
         const syncCollection = async (
@@ -493,23 +510,32 @@ export const BiomateProvider: React.FC<{ children: React.ReactNode }> = ({ child
         ) => {
           try {
             const snap = await getDocs(query(collection(db, colName)));
-            if (snap.empty) {
-              console.log(`[BOOTSTRAP] Firestore collection '${colName}' is blank. Seeding default / local state...`);
+            console.log(`[BOOTSTRAP] Checking '${colName}'... isBrandNewDb=${isBrandNewDb}, snap.empty=${snap.empty}`);
+            
+            if (isBrandNewDb) {
+              console.log(`[BOOTSTRAP] Firestore is brand new. Uploading default / local state for '${colName}'...`);
               const itemsToUpload = localStateItems.length > 0 ? localStateItems : defaultItems;
               for (const item of itemsToUpload) {
                 await setDoc(doc(db, colName, item.id), cleanData(item));
               }
+              console.log("Firestore Load:", itemsToUpload);
               setStateFn(itemsToUpload);
+            } else if (snap.empty) {
+              // The database contains user records, but this specific collection is empty (e.g., all deleted)
+              console.log(`[BOOTSTRAP] Collection '${colName}' is blank (legitimately cleared). Keeping as empty.`);
+              console.log("Firestore Load:", []);
+              setStateFn([]);
             } else {
               const fetchedItems: any[] = [];
               snap.forEach(d => {
                 fetchedItems.push({ ...d.data(), id: d.id });
               });
-              // Sort logs and sales and batches to maintain descending order
+              
+              // Sort to maintain correct descending orders
               if (colName === 'sales' || colName === 'productionBatches' || colName === 'smartProductionLogs') {
                 fetchedItems.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
               }
-              console.log(`[BOOTSTRAP] Synchronized! Fetched ${fetchedItems.length} items from Firestore for '${colName}'`);
+              console.log("Firestore Load:", fetchedItems);
               setStateFn(fetchedItems);
             }
           } catch (colError: any) {
@@ -526,7 +552,7 @@ export const BiomateProvider: React.FC<{ children: React.ReactNode }> = ({ child
         await syncCollection('recipes', recipes, DEFAULT_RECIPES, setRecipes);
         await syncCollection('smartProductionLogs', smartProductionLogs, DEFAULT_SMART_LOGS, setSmartProductionLogs);
 
-        console.log("All collections synced and secured nicely.");
+        console.log("All collections synced successfully.");
       } catch (error) {
         console.error("Firestore global bootstrap operation failing: ", error);
       } finally {
@@ -536,11 +562,12 @@ export const BiomateProvider: React.FC<{ children: React.ReactNode }> = ({ child
     };
 
     syncDatabaseOnStart();
-  }, [isMockFirebase, isAuthenticated]);
+  }, [isMockFirebase, isAuthenticated, authInitialized]);
 
   // Auth anonymous fallback state and state listeners
   useEffect(() => {
     const unsubAuth = onAuthStateChanged(auth, (user) => {
+      setAuthInitialized(true);
       if (user) {
         setIsAuthenticated(true);
         setCurrentUser(user);
@@ -565,7 +592,7 @@ export const BiomateProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
   // Live Firestore listeners
   useEffect(() => {
-    if (isMockFirebase || !isAuthenticated) return;
+    if (isMockFirebase || !isAuthenticated || !isCloudReady) return;
 
     console.log("Registering live synchronized Firestore listeners...");
 
@@ -574,7 +601,7 @@ export const BiomateProvider: React.FC<{ children: React.ReactNode }> = ({ child
       snapshot.forEach(d => {
         list.push({ ...d.data(), id: d.id } as Category);
       });
-      console.log(`[onSnapshot] categories updated: ${list.length} docs found.`);
+      console.log("Realtime Snapshot:", snapshot);
       if (list.length > 0 || isCloudReady) {
         setCategories(list);
       }
@@ -588,7 +615,7 @@ export const BiomateProvider: React.FC<{ children: React.ReactNode }> = ({ child
       snapshot.forEach(d => {
         list.push({ ...d.data(), id: d.id } as Product);
       });
-      console.log(`[onSnapshot] products updated: ${list.length} docs found.`);
+      console.log("Realtime Snapshot:", snapshot);
       if (list.length > 0 || isCloudReady) {
         setProducts(list);
       }
@@ -603,7 +630,7 @@ export const BiomateProvider: React.FC<{ children: React.ReactNode }> = ({ child
         list.push({ ...d.data(), id: d.id } as Sale);
       });
       list.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-      console.log(`[onSnapshot] sales updated: ${list.length} docs found.`);
+      console.log("Realtime Snapshot:", snapshot);
       if (list.length > 0 || isCloudReady) {
         setSales(list);
       }
@@ -617,7 +644,7 @@ export const BiomateProvider: React.FC<{ children: React.ReactNode }> = ({ child
       snapshot.forEach(d => {
         list.push({ ...d.data(), id: d.id } as Expense);
       });
-      console.log(`[onSnapshot] expenses updated: ${list.length} docs found.`);
+      console.log("Realtime Snapshot:", snapshot);
       if (list.length > 0 || isCloudReady) {
         setExpenses(list);
       }
@@ -632,7 +659,7 @@ export const BiomateProvider: React.FC<{ children: React.ReactNode }> = ({ child
         list.push({ ...d.data(), id: d.id } as ProductionBatch);
       });
       list.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-      console.log(`[onSnapshot] productionBatches updated: ${list.length} docs found.`);
+      console.log("Realtime Snapshot:", snapshot);
       if (list.length > 0 || isCloudReady) {
         setProductionBatches(list);
       }
@@ -646,7 +673,7 @@ export const BiomateProvider: React.FC<{ children: React.ReactNode }> = ({ child
       snapshot.forEach(d => {
         list.push({ ...d.data(), id: d.id } as Recipe);
       });
-      console.log(`[onSnapshot] recipes updated: ${list.length} docs found.`);
+      console.log("Realtime Snapshot:", snapshot);
       if (list.length > 0 || isCloudReady) {
         setRecipes(list);
       }
@@ -661,7 +688,7 @@ export const BiomateProvider: React.FC<{ children: React.ReactNode }> = ({ child
         list.push({ ...d.data(), id: d.id } as SmartProductionLog);
       });
       list.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-      console.log(`[onSnapshot] smartProductionLogs updated: ${list.length} docs found.`);
+      console.log("Realtime Snapshot:", snapshot);
       if (list.length > 0 || isCloudReady) {
         setSmartProductionLogs(list);
       }
