@@ -42,6 +42,7 @@ export default function Sidebar() {
   } = useBiomate();
 
   const [mobileOpen, setMobileOpen] = useState(false);
+  const isInIframe = typeof window !== 'undefined' && window.self !== window.top;
 
   const menuItems: { tab: SidebarTab; label: string; icon: React.ReactNode }[] = [
     { tab: 'painel', label: 'Painel', icon: <LayoutDashboard className="w-5 h-5" /> },
@@ -152,14 +153,41 @@ export default function Sidebar() {
 
         {/* Cloud Status / Authentication Section */}
         {!currentUser ? (
-          <div className="mt-4 p-3 bg-emerald-900/20 rounded-xl border border-emerald-500/10">
-            <div className="flex items-center gap-2 mb-1.5">
-              <span className="w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse" />
-              <span className="text-[10px] text-amber-300 font-semibold tracking-wider uppercase">Modo Local (Offline)</span>
-            </div>
-            <p className="text-[10px] text-emerald-100/50 mb-2.5 leading-relaxed">
-              Conserve e sincronize seus dados na nuvem para acessá-los em múltiplos aparelhos em tempo real.
-            </p>
+          <div className="mt-4 p-3 bg-emerald-900/35 rounded-xl border border-emerald-500/20 shadow-lg">
+            {isInIframe ? (
+              <>
+                <div className="flex items-center gap-2 mb-1.5">
+                  <span className="w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse" />
+                  <span className="text-[10px] text-amber-300 font-semibold tracking-wider uppercase">Bloqueio de IFrame</span>
+                </div>
+                <p className="text-[10px] text-emerald-100/70 mb-3 leading-relaxed">
+                  O painel do AI Studio impede pop-ups de login. Abra o BIOMATE em uma aba independente para poder conectar sua conta!
+                </p>
+                <button
+                  onClick={() => window.open(window.location.href, '_blank')}
+                  className="w-full flex items-center justify-center gap-2 px-2.5 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-lg text-xs transition-all shadow-md active:scale-[0.98] mb-2.5"
+                  id="btn-open-new-tab"
+                >
+                  <Cloud className="w-3.5 h-3.5 shrink-0" />
+                  <span>Abrir App em Nova Aba ↗</span>
+                </button>
+                <div className="border-t border-emerald-950/50 my-2 pt-2">
+                  <p className="text-[9px] text-emerald-100/45 text-center leading-normal mb-2">
+                    Se já estiver em uma aba separada, tente usar o botão abaixo:
+                  </p>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="flex items-center gap-2 mb-1.5">
+                  <span className="w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse" />
+                  <span className="text-[10px] text-amber-300 font-semibold tracking-wider uppercase">Modo Local (Offline)</span>
+                </div>
+                <p className="text-[10px] text-emerald-100/50 mb-2.5 leading-relaxed">
+                  Conserve e sincronize seus dados na nuvem para acessá-los em múltiplos aparelhos em tempo real.
+                </p>
+              </>
+            )}
             <button
               onClick={() => signInWithGoogle()}
               className="w-full flex items-center justify-center gap-2 px-2.5 py-1.5 bg-emerald-500 hover:bg-emerald-400 text-white font-medium rounded-lg text-[11px] transition-all shadow-md active:scale-[0.98]"
