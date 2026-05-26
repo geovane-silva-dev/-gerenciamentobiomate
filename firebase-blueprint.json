@@ -1,0 +1,149 @@
+{
+  "entities": {
+    "Category": {
+      "title": "Category",
+      "description": "Product categories",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "description": { "type": "string" }
+      },
+      "required": ["id", "name", "description"]
+    },
+    "Product": {
+      "title": "Product",
+      "description": "Ecolgical raw materials and end-products",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "sku": { "type": "string" },
+        "categoryId": { "type": "string" },
+        "price": { "type": "number" },
+        "costPrice": { "type": "number" },
+        "stock": { "type": "number" },
+        "minStock": { "type": "number" },
+        "imageUrl": { "type": "string" },
+        "unit": { "type": "string" },
+        "productType": { "type": "string", "enum": ["Produto Final", "Insumo", "Ambos"] }
+      },
+      "required": ["id", "name", "sku", "categoryId", "price", "costPrice", "stock", "minStock", "unit"]
+    },
+    "Sale": {
+      "title": "Sale",
+      "description": "Sales logs",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "date": { "type": "string", "format": "date-time" },
+        "productId": { "type": "string" },
+        "quantity": { "type": "number" },
+        "unitPrice": { "type": "number" },
+        "customerName": { "type": "string" },
+        "totalAmount": { "type": "number" },
+        "productionCost": { "type": "number" },
+        "profit": { "type": "number" }
+      },
+      "required": ["id", "date", "productId", "quantity", "unitPrice", "customerName", "totalAmount", "productionCost", "profit"]
+    },
+    "Expense": {
+      "title": "Expense",
+      "description": "Operating expenses",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "description": { "type": "string" },
+        "amount": { "type": "number" },
+        "date": { "type": "string" },
+        "category": { "type": "string" },
+        "type": { "type": "string", "enum": ["fixo", "variavel"] }
+      },
+      "required": ["id", "description", "amount", "date", "category", "type"]
+    },
+    "ProductionBatch": {
+      "title": "ProductionBatch",
+      "description": "Manual production batch tracking",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "date": { "type": "string", "format": "date-time" },
+        "productId": { "type": "string" },
+        "quantityProduced": { "type": "number" },
+        "rawMaterialCost": { "type": "number" },
+        "responsible": { "type": "string" },
+        "status": { "type": "string", "enum": ["Concluído", "Em Andamento", "Planejado"] }
+      },
+      "required": ["id", "date", "productId", "quantityProduced", "rawMaterialCost", "responsible", "status"]
+    },
+    "RecipeIngredient": {
+      "title": "RecipeIngredient",
+      "description": "Ingredients for a recipe",
+      "type": "object",
+      "properties": {
+        "productId": { "type": "string" },
+        "quantityNeeded": { "type": "number" }
+      },
+      "required": ["productId", "quantityNeeded"]
+    },
+    "Recipe": {
+      "title": "Recipe",
+      "description": "Smart production formulas",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "productId": { "type": "string" },
+        "name": { "type": "string" },
+        "ingredients": {
+          "type": "array"
+        }
+      },
+      "required": ["id", "productId", "name"}
+    },
+    "SmartProductionLog": {
+      "title": "SmartProductionLog",
+      "description": "Historical runs of smart production",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "recipeId": { "type": "string" },
+        "productId": { "type": "string" },
+        "quantityProduced": { "type": "number" },
+        "totalCost": { "type": "number" },
+        "date": { "type": "string", "format": "date-time" },
+        "responsible": { "type": "string" }
+      },
+      "required": ["id", "recipeId", "productId", "quantityProduced", "totalCost", "date", "responsible"]
+    }
+  },
+  "firestore": {
+    "categories": {
+      "schema": "Category",
+      "description": "Access to product categories"
+    },
+    "products": {
+      "schema": "Product",
+      "description": "Access to product and materials inventory"
+    },
+    "sales": {
+      "schema": "Sale",
+      "description": "Access to sales records"
+    },
+    "expenses": {
+      "schema": "Expense",
+      "description": "Access to fixed/variable expenses"
+    },
+    "productionBatches": {
+      "schema": "ProductionBatch",
+      "description": "Access to production batches"
+    },
+    "recipes": {
+      "schema": "Recipe",
+      "description": "Access to production formulas"
+    },
+    "smartProductionLogs": {
+      "schema": "SmartProductionLog",
+      "description": "Access to smart production history"
+    }
+  }
+}

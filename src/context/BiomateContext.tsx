@@ -1,5 +1,14 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { Category, Product, Sale, Expense, ProductionBatch, SidebarTab, Recipe, SmartProductionLog } from '../types';
+import { db, auth, OperationType, handleFirestoreError } from '../firebase';
+import { 
+  collection, 
+  doc, 
+  setDoc, 
+  deleteDoc, 
+  onSnapshot 
+} from 'firebase/firestore';
+import { signInAnonymously, onAuthStateChanged } from 'firebase/auth';
 
 interface BiomateContextType {
   // Navigation & UI state
@@ -301,6 +310,180 @@ export const BiomateProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setConfirmConfig(null);
   };
 
+  // Firebase configuration validation
+  const isMockFirebase = !db.app.options.apiKey || db.app.options.apiKey.includes('mock');
+
+  // Firebase Firestore write helpers
+  const saveDoc = async (coll: string, id: string, data: any) => {
+    if (isMockFirebase) return;
+    try {
+      await setDoc(doc(db, coll, id), data);
+    } catch (error) {
+      handleFirestoreError(error, OperationType.WRITE, `${coll}/${id}`);
+    }
+  };
+
+  const removeDoc = async (coll: string, id: string) => {
+    if (isMockFirebase) return;
+    try {
+      await deleteDoc(doc(db, coll, id));
+    } catch (error) {
+      handleFirestoreError(error, OperationType.DELETE, `${coll}/${id}`);
+    }
+  };
+
+  // Seed default data to Firestore if it is a real connection and is empty
+  useEffect(() => {
+    const seedFirestoreIfEmpty = async () => {
+      if (isMockFirebase) return;
+      try {
+        const { getDocs, query, limit } = await import('firebase/firestore');
+        const snap = await getDocs(query(collection(db, 'categories'), limit(1)));
+        if (snap.empty) {
+          console.log("Seeding default data to Firestore...");
+          for (const cat of DEFAULT_CATEGORIES) {
+            await setDoc(doc(db, 'categories', cat.id), cat);
+          }
+          for (const prod of DEFAULT_PRODUCTS) {
+            await setDoc(doc(db, 'products', prod.id), prod);
+          }
+          for (const sale of DEFAULT_SALES) {
+            await setDoc(doc(db, 'sales', sale.id), sale);
+          }
+          for (const exp of DEFAULT_EXPENSES) {
+            await setDoc(doc(db, 'expenses', exp.id), exp);
+          }
+          for (const pb of DEFAULT_PRODUCTION_BATCHES) {
+            await setDoc(doc(db, 'productionBatches', pb.id), pb);
+          }
+          for (const rec of DEFAULT_RECIPES) {
+            await setDoc(doc(db, 'recipes', rec.id), rec);
+          }
+          for (const slog of DEFAULT_SMART_LOGS) {
+            await setDoc(doc(db, 'smartProductionLogs', slog.id), slog);
+          }
+          console.log("Firestore seeding completed successfully!");
+        }
+      } catch (error) {
+        console.warn("Seeding Firestore failed (likely unauthenticated or missing rules):", error);
+      }
+    };
+    seedFirestoreIfEmpty();
+  }, [isMockFirebase]);
+
+  // Auth anonymous state
+  useEffect(() => {
+    onAuthStateChanged(auth, (user) => {
+      if (!user) {
+        signInAnonymously(auth).catch((err) => {
+          console.warn("Anonymous sign-in not enabled or failed:", err);
+        });
+      }
+    });
+  }, []);
+
+  // Live Firestore listeners
+  useEffect(() => {
+    if (isMockFirebase) return;
+
+    const unsubCategories = onSnapshot(collection(db, 'categories'), (snapshot) => {
+      const list: Category[] = [];
+      snapshot.forEach(d => {
+        list.push(d.data() as Category);
+      });
+      if (list.length > 0) {
+        setCategories(list);
+      }
+    }, (err) => {
+      console.warn("Firestore categories snap error:", err);
+    });
+
+    const unsubProducts = onSnapshot(collection(db, 'products'), (snapshot) => {
+      const list: Product[] = [];
+      snapshot.forEach(d => {
+        list.push(d.data() as Product);
+      });
+      if (list.length > 0) {
+        setProducts(list);
+      }
+    }, (err) => {
+      console.warn("Firestore products snap error:", err);
+    });
+
+    const unsubSales = onSnapshot(collection(db, 'sales'), (snapshot) => {
+      const list: Sale[] = [];
+      snapshot.forEach(d => {
+        list.push(d.data() as Sale);
+      });
+      list.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+      if (list.length > 0) {
+        setSales(list);
+      }
+    }, (err) => {
+      console.warn("Firestore sales snap error:", err);
+    });
+
+    const unsubExpenses = onSnapshot(collection(db, 'expenses'), (snapshot) => {
+      const list: Expense[] = [];
+      snapshot.forEach(d => {
+        list.push(d.data() as Expense);
+      });
+      if (list.length > 0) {
+        setExpenses(list);
+      }
+    }, (err) => {
+      console.warn("Firestore expenses snap error:", err);
+    });
+
+    const unsubBatches = onSnapshot(collection(db, 'productionBatches'), (snapshot) => {
+      const list: ProductionBatch[] = [];
+      snapshot.forEach(d => {
+        list.push(d.data() as ProductionBatch);
+      });
+      list.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+      if (list.length > 0) {
+        setProductionBatches(list);
+      }
+    }, (err) => {
+      console.warn("Firestore productionBatches snap error:", err);
+    });
+
+    const unsubRecipes = onSnapshot(collection(db, 'recipes'), (snapshot) => {
+      const list: Recipe[] = [];
+      snapshot.forEach(d => {
+        list.push(d.data() as Recipe);
+      });
+      if (list.length > 0) {
+        setRecipes(list);
+      }
+    }, (err) => {
+      console.warn("Firestore recipes snap error:", err);
+    });
+
+    const unsubSmartLogs = onSnapshot(collection(db, 'smartProductionLogs'), (snapshot) => {
+      const list: SmartProductionLog[] = [];
+      snapshot.forEach(d => {
+        list.push(d.data() as SmartProductionLog);
+      });
+      list.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+      if (list.length > 0) {
+        setSmartProductionLogs(list);
+      }
+    }, (err) => {
+      console.warn("Firestore smartProductionLogs snap error:", err);
+    });
+
+    return () => {
+      unsubCategories();
+      unsubProducts();
+      unsubSales();
+      unsubExpenses();
+      unsubBatches();
+      unsubRecipes();
+      unsubSmartLogs();
+    };
+  }, [isMockFirebase]);
+
   // Load from LocalStorage or seed with default data
   const [categories, setCategories] = useState<Category[]>(() => {
     const local = localStorage.getItem('biomate_categories');
@@ -397,29 +580,44 @@ export const BiomateProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const addCategory = (cat: Omit<Category, 'id'>) => {
     const newCat = { ...cat, id: `cat-${Date.now()}` };
     setCategories(prev => [...prev, newCat]);
+    saveDoc('categories', newCat.id, newCat);
   };
 
   const updateCategory = (id: string, updated: Omit<Category, 'id'>) => {
-    setCategories(prev => prev.map(c => c.id === id ? { ...updated, id } : c));
+    const updatedCat = { ...updated, id };
+    setCategories(prev => prev.map(c => c.id === id ? updatedCat : c));
+    saveDoc('categories', id, updatedCat);
   };
 
   const deleteCategory = (id: string) => {
     setCategories(prev => prev.filter(c => c.id !== id));
+    removeDoc('categories', id);
     // Set associated products categories to empty string if deleted
-    setProducts(prev => prev.map(p => p.categoryId === id ? { ...p, categoryId: '' } : p));
+    setProducts(prev => prev.map(p => {
+      if (p.categoryId === id) {
+        const updatedProd = { ...p, categoryId: '' };
+        saveDoc('products', p.id, updatedProd);
+        return updatedProd;
+      }
+      return p;
+    }));
   };
 
   const addProduct = (prod: Omit<Product, 'id'>) => {
     const newProd = { ...prod, id: `prod-${Date.now()}` };
     setProducts(prev => [...prev, newProd]);
+    saveDoc('products', newProd.id, newProd);
   };
 
   const updateProduct = (id: string, updated: Omit<Product, 'id'>) => {
-    setProducts(prev => prev.map(p => p.id === id ? { ...updated, id } : p));
+    const updatedProd = { ...updated, id };
+    setProducts(prev => prev.map(p => p.id === id ? updatedProd : p));
+    saveDoc('products', id, updatedProd);
   };
 
   const deleteProduct = (id: string) => {
     setProducts(prev => prev.filter(p => p.id !== id));
+    removeDoc('products', id);
   };
 
   const registerSale = (saleData: Omit<Sale, 'id' | 'date' | 'totalAmount' | 'productionCost' | 'profit'>) => {
@@ -447,12 +645,15 @@ export const BiomateProvider: React.FC<{ children: React.ReactNode }> = ({ child
     // Deduct stock
     setProducts(prev => prev.map(p => {
       if (p.id === saleData.productId) {
-        return { ...p, stock: Math.max(0, p.stock - quantity) };
+        const updatedProd = { ...p, stock: Math.max(0, p.stock - quantity) };
+        saveDoc('products', p.id, updatedProd);
+        return updatedProd;
       }
       return p;
     }));
 
     setSales(prev => [newSale, ...prev]);
+    saveDoc('sales', newSale.id, newSale);
     return true;
   };
 
@@ -462,21 +663,26 @@ export const BiomateProvider: React.FC<{ children: React.ReactNode }> = ({ child
       // Revert product stock
       setProducts(prev => prev.map(p => {
         if (p.id === saleToDelete.productId) {
-          return { ...p, stock: p.stock + saleToDelete.quantity };
+          const updatedProd = { ...p, stock: p.stock + saleToDelete.quantity };
+          saveDoc('products', p.id, updatedProd);
+          return updatedProd;
         }
         return p;
       }));
     }
     setSales(prev => prev.filter(s => s.id !== id));
+    removeDoc('sales', id);
   };
 
   const registerExpense = (exp: Omit<Expense, 'id'>) => {
     const newExp = { ...exp, id: `exp-${Date.now()}` };
     setExpenses(prev => [...prev, newExp]);
+    saveDoc('expenses', newExp.id, newExp);
   };
 
   const deleteExpense = (id: string) => {
     setExpenses(prev => prev.filter(e => e.id !== id));
+    removeDoc('expenses', id);
   };
 
   const registerProductionBatch = (batch: Omit<ProductionBatch, 'id' | 'date'>) => {
@@ -490,13 +696,16 @@ export const BiomateProvider: React.FC<{ children: React.ReactNode }> = ({ child
     if (batch.status === 'Concluído') {
       setProducts(prev => prev.map(p => {
         if (p.id === batch.productId) {
-          return { ...p, stock: p.stock + Number(batch.quantityProduced) };
+          const updatedProd = { ...p, stock: p.stock + Number(batch.quantityProduced) };
+          saveDoc('products', p.id, updatedProd);
+          return updatedProd;
         }
         return p;
       }));
     }
 
     setProductionBatches(prev => [newBatch, ...prev]);
+    saveDoc('productionBatches', newBatch.id, newBatch);
   };
 
   const deleteProductionBatch = (id: string) => {
@@ -505,25 +714,32 @@ export const BiomateProvider: React.FC<{ children: React.ReactNode }> = ({ child
       // Deduct stock back
       setProducts(prev => prev.map(p => {
         if (p.id === batch.productId) {
-          return { ...p, stock: Math.max(0, p.stock - batch.quantityProduced) };
+          const updatedProd = { ...p, stock: Math.max(0, p.stock - batch.quantityProduced) };
+          saveDoc('products', p.id, updatedProd);
+          return updatedProd;
         }
         return p;
       }));
     }
     setProductionBatches(prev => prev.filter(b => b.id !== id));
+    removeDoc('productionBatches', id);
   };
 
   const concludeProductionBatch = (id: string) => {
     setProductionBatches(prev => prev.map(b => {
       if (b.id === id && b.status === 'Em Andamento') {
+        const updatedBatch = { ...b, status: 'Concluído' as const };
         // Convert status and update stock
         setProducts(pPrev => pPrev.map(p => {
           if (p.id === b.productId) {
-            return { ...p, stock: p.stock + Number(b.quantityProduced) };
+            const updatedProd = { ...p, stock: p.stock + Number(b.quantityProduced) };
+            saveDoc('products', p.id, updatedProd);
+            return updatedProd;
           }
           return p;
         }));
-        return { ...b, status: 'Concluído' as const };
+        saveDoc('productionBatches', id, updatedBatch);
+        return updatedBatch;
       }
       return b;
     }));
@@ -532,14 +748,18 @@ export const BiomateProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const addRecipe = (rec: Omit<Recipe, 'id'>) => {
     const newRec = { ...rec, id: `rec-${Date.now()}` };
     setRecipes(prev => [...prev, newRec]);
+    saveDoc('recipes', newRec.id, newRec);
   };
 
   const updateRecipe = (id: string, updated: Omit<Recipe, 'id'>) => {
-    setRecipes(prev => prev.map(r => r.id === id ? { ...updated, id } : r));
+    const updatedRecipe = { ...updated, id };
+    setRecipes(prev => prev.map(r => r.id === id ? updatedRecipe : r));
+    saveDoc('recipes', id, updatedRecipe);
   };
 
   const deleteRecipe = (id: string) => {
     setRecipes(prev => prev.filter(r => r.id !== id));
+    removeDoc('recipes', id);
   };
 
   const executeSmartProduction = (recipeId: string, quantityToProduce: number, responsible: string) => {
@@ -587,19 +807,23 @@ export const BiomateProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
     setProducts(prev => prev.map(p => {
       if (p.id === recipe.productId) {
-        return {
+        const updatedProd = {
           ...p,
           stock: p.stock + quantityToProduce,
           costPrice: Number(unitCostPrice.toFixed(2))
         };
+        saveDoc('products', p.id, updatedProd);
+        return updatedProd;
       }
       
       const ingUsage = ingredientCostBreakdown.find(item => item.id === p.id);
       if (ingUsage) {
-        return {
+        const updatedProd = {
           ...p,
           stock: Math.max(0, p.stock - ingUsage.totalNeeded)
         };
+        saveDoc('products', p.id, updatedProd);
+        return updatedProd;
       }
 
       return p;
@@ -617,6 +841,7 @@ export const BiomateProvider: React.FC<{ children: React.ReactNode }> = ({ child
     };
 
     setSmartProductionLogs(prev => [newLog, ...prev]);
+    saveDoc('smartProductionLogs', newLog.id, newLog);
 
     return { success: true };
   };
@@ -628,27 +853,31 @@ export const BiomateProvider: React.FC<{ children: React.ReactNode }> = ({ child
       if (recipe) {
         setProducts(prev => prev.map(p => {
           if (p.id === logToDelete.productId) {
-            return {
+            const updatedProd = {
               ...p,
               stock: Math.max(0, p.stock - logToDelete.quantityProduced)
             };
+            saveDoc('products', p.id, updatedProd);
+            return updatedProd;
           }
           const ing = recipe.ingredients.find(i => i.productId === p.id);
           if (ing) {
-            return {
+            const updatedProd = {
               ...p,
               stock: p.stock + (ing.quantityNeeded * logToDelete.quantityProduced)
             };
+            saveDoc('products', p.id, updatedProd);
+            return updatedProd;
           }
           return p;
         }));
       }
     }
     setSmartProductionLogs(prev => prev.filter(l => l.id !== id));
+    removeDoc('smartProductionLogs', id);
   };
 
-  const resetDatabase = () => {
-    // Return to original seeded state
+  const resetDatabase = async () => {
     setCategories(DEFAULT_CATEGORIES);
     setProducts(DEFAULT_PRODUCTS);
     setSales(DEFAULT_SALES);
@@ -659,8 +888,43 @@ export const BiomateProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setClientFilter('all');
     setShowFixedExpensesToggle(true);
     setShowProductionCostToggle(true);
-    // Force simple page reload or navigation to Dashboard
     setActiveTab('painel');
+
+    if (!isMockFirebase) {
+      try {
+        const { getDocs, deleteDoc, doc } = await import('firebase/firestore');
+        const collections = ['categories', 'products', 'sales', 'expenses', 'productionBatches', 'recipes', 'smartProductionLogs'];
+        for (const colName of collections) {
+          const snap = await getDocs(collection(db, colName));
+          for (const d of snap.docs) {
+            await deleteDoc(doc(db, colName, d.id));
+          }
+        }
+        for (const cat of DEFAULT_CATEGORIES) {
+          await setDoc(doc(db, 'categories', cat.id), cat);
+        }
+        for (const prod of DEFAULT_PRODUCTS) {
+          await setDoc(doc(db, 'products', prod.id), prod);
+        }
+        for (const sale of DEFAULT_SALES) {
+          await setDoc(doc(db, 'sales', sale.id), sale);
+        }
+        for (const exp of DEFAULT_EXPENSES) {
+          await setDoc(doc(db, 'expenses', exp.id), exp);
+        }
+        for (const pb of DEFAULT_PRODUCTION_BATCHES) {
+          await setDoc(doc(db, 'productionBatches', pb.id), pb);
+        }
+        for (const rec of DEFAULT_RECIPES) {
+          await setDoc(doc(db, 'recipes', rec.id), rec);
+        }
+        for (const slog of DEFAULT_SMART_LOGS) {
+          await setDoc(doc(db, 'smartProductionLogs', slog.id), slog);
+        }
+      } catch (err) {
+        console.warn("Resetting Firestore database failed:", err);
+      }
+    }
   };
 
   return (

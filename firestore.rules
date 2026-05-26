@@ -1,0 +1,154 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global Safety Net: Catch-all deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Reusable, hardened global validation helpers
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    // ------------------ CATEGORIES ------------------
+    function isValidCategory(data) {
+      return data.keys().hasAll(['id', 'name', 'description'])
+        && data.keys().size() == 3
+        && data.id is string && data.id.size() <= 100
+        && data.name is string && data.name.size() >= 1 && data.name.size() <= 200
+        && data.description is string && data.description.size() <= 1000;
+    }
+
+    match /categories/{categoryId} {
+      allow get, list: if isSignedIn();
+      allow create, update: if isSignedIn() && isValidCategory(incoming());
+      allow delete: if isSignedIn();
+    }
+
+    // ------------------ PRODUCTS ------------------
+    function isValidProduct(data) {
+      return data.keys().hasAll(['id', 'name', 'sku', 'categoryId', 'price', 'costPrice', 'stock', 'minStock', 'unit'])
+        && data.id is string && data.id.size() <= 100
+        && data.name is string && data.name.size() >= 1 && data.name.size() <= 250
+        && data.sku is string && data.sku.size() <= 100
+        && data.categoryId is string && data.categoryId.size() <= 100
+        && (data.price is number || data.price is int || data.price is float)
+        && (data.costPrice is number || data.costPrice is int || data.costPrice is float)
+        && (data.stock is number || data.stock is int)
+        && (data.minStock is number || data.minStock is int)
+        && data.unit is string && data.unit.size() <= 50;
+    }
+
+    match /products/{productId} {
+      allow get, list: if isSignedIn();
+      allow create, update: if isSignedIn() && isValidProduct(incoming());
+      allow delete: if isSignedIn();
+    }
+
+    // ------------------ SALES ------------------
+    function isValidSale(data) {
+      return data.keys().hasAll(['id', 'date', 'productId', 'quantity', 'unitPrice', 'customerName', 'totalAmount', 'productionCost', 'profit'])
+        && data.id is string && data.id.size() <= 100
+        && data.date is string
+        && data.productId is string && data.productId.size() <= 100
+        && (data.quantity is number || data.quantity is int)
+        && (data.unitPrice is number || data.unitPrice is int || data.unitPrice is float)
+        && data.customerName is string && data.customerName.size() <= 200
+        && (data.totalAmount is number || data.totalAmount is int || data.totalAmount is float)
+        && (data.productionCost is number || data.productionCost is int || data.productionCost is float)
+        && (data.profit is number || data.profit is int || data.profit is float);
+    }
+
+    match /sales/{saleId} {
+      allow get, list: if isSignedIn();
+      allow create: if isSignedIn() && isValidSale(incoming());
+      allow update: if isSignedIn() && isValidSale(incoming()) && incoming().diff(existing()).affectedKeys().hasOnly(['customerName', 'quantity', 'totalAmount', 'profit']);
+      allow delete: if isSignedIn();
+    }
+
+    // ------------------ EXPENSES ------------------
+    function isValidExpense(data) {
+      return data.keys().hasAll(['id', 'description', 'amount', 'date', 'category', 'type'])
+        && data.keys().size() == 6
+        && data.id is string && data.id.size() <= 100
+        && data.description is string && data.description.size() <= 500
+        && (data.amount is number || data.amount is int || data.amount is float)
+        && data.date is string
+        && data.category is string && data.category.size() <= 100
+        && data.type is string && (data.type == 'fixo' || data.type == 'variavel');
+    }
+
+    match /expenses/{expenseId} {
+      allow get, list: if isSignedIn();
+      allow create, update: if isSignedIn() && isValidExpense(incoming());
+      allow delete: if isSignedIn();
+    }
+
+    // ------------------ PRODUCTION BATCHES ------------------
+    function isValidProductionBatch(data) {
+      return data.keys().hasAll(['id', 'date', 'productId', 'quantityProduced', 'rawMaterialCost', 'responsible', 'status'])
+        && data.keys().size() == 7
+        && data.id is string && data.id.size() <= 100
+        && data.date is string
+        && data.productId is string && data.productId.size() <= 100
+        && (data.quantityProduced is number || data.quantityProduced is int)
+        && (data.rawMaterialCost is number || data.rawMaterialCost is int || data.rawMaterialCost is float)
+        && data.responsible is string && data.responsible.size() <= 100
+        && data.status is string && (data.status == 'Concluído' || data.status == 'Em Andamento' || data.status == 'Planejado');
+    }
+
+    match /productionBatches/{batchId} {
+      allow get, list: if isSignedIn();
+      allow create, update: if isSignedIn() && isValidProductionBatch(incoming());
+      allow delete: if isSignedIn();
+    }
+
+    // ------------------ RECIPES ------------------
+    function isValidRecipe(data) {
+      return data.keys().hasAll(['id', 'productId', 'name', 'ingredients'])
+        && data.id is string && data.id.size() <= 100
+        && data.productId is string && data.productId.size() <= 100
+        && data.name is string && data.name.size() <= 200
+        && data.ingredients is list;
+    }
+
+    match /recipes/{recipeId} {
+      allow get, list: if isSignedIn();
+      allow create, update: if isSignedIn() && isValidRecipe(incoming());
+      allow delete: if isSignedIn();
+    }
+
+    // ------------------ SMART PRODUCTION LOGS ------------------
+    function isValidSmartLog(data) {
+      return data.keys().hasAll(['id', 'recipeId', 'productId', 'quantityProduced', 'totalCost', 'date', 'responsible'])
+        && data.keys().size() == 7
+        && data.id is string && data.id.size() <= 100
+        && data.recipeId is string && data.recipeId.size() <= 100
+        && data.productId is string && data.productId.size() <= 100
+        && (data.quantityProduced is number || data.quantityProduced is int)
+        && (data.totalCost is number || data.totalCost is int || data.totalCost is float)
+        && data.date is string
+        && data.responsible is string && data.responsible.size() <= 100;
+    }
+
+    match /smartProductionLogs/{logId} {
+      allow get, list: if isSignedIn();
+      allow create, update: if isSignedIn() && isValidSmartLog(incoming());
+      allow delete: if isSignedIn();
+    }
+  }
+}
