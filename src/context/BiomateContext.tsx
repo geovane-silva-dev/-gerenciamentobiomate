@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { Category, Product, Sale, Expense, ProductionBatch, SidebarTab, Recipe, SmartProductionLog } from '../types';
-import { db, auth, OperationType, handleFirestoreError } from '../firebase';
+import { db, auth, OperationType, handleFirestoreError, isMockFirebase } from '../firebase';
 import { 
   collection, 
   doc, 
@@ -325,7 +325,7 @@ export const BiomateProvider: React.FC<{ children: React.ReactNode }> = ({ child
   };
 
   // Firebase configuration validation
-  const isMockFirebase = !db.app?.options?.apiKey || db.app.options.apiKey.includes('mock');
+  // isMockFirebase is now imported directly from firebase.ts
 
   // Helper to remove any 'undefined' property fields recursively so Firestore setDoc does not throw unsupported value errors
   const cleanData = (obj: any): any => {
@@ -494,7 +494,7 @@ export const BiomateProvider: React.FC<{ children: React.ReactNode }> = ({ child
           try {
             const snap = await getDocs(query(collection(db, colName)));
             if (snap.empty) {
-              console.log(`Firestore collection '${colName}' is blank. Uploading active local storage content or default data...`);
+              console.log(`[BOOTSTRAP] Firestore collection '${colName}' is blank. Seeding default / local state...`);
               const itemsToUpload = localStateItems.length > 0 ? localStateItems : defaultItems;
               for (const item of itemsToUpload) {
                 await setDoc(doc(db, colName, item.id), cleanData(item));
@@ -503,13 +503,13 @@ export const BiomateProvider: React.FC<{ children: React.ReactNode }> = ({ child
             } else {
               const fetchedItems: any[] = [];
               snap.forEach(d => {
-                fetchedItems.push(d.data());
+                fetchedItems.push({ ...d.data(), id: d.id });
               });
               // Sort logs and sales and batches to maintain descending order
               if (colName === 'sales' || colName === 'productionBatches' || colName === 'smartProductionLogs') {
                 fetchedItems.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
               }
-              console.log(`Synchronized successfully! Fetched ${fetchedItems.length} items from cloud storage for collection: ${colName}`);
+              console.log(`[BOOTSTRAP] Synchronized! Fetched ${fetchedItems.length} items from Firestore for '${colName}'`);
               setStateFn(fetchedItems);
             }
           } catch (colError: any) {
@@ -567,94 +567,111 @@ export const BiomateProvider: React.FC<{ children: React.ReactNode }> = ({ child
   useEffect(() => {
     if (isMockFirebase || !isAuthenticated) return;
 
+    console.log("Registering live synchronized Firestore listeners...");
+
     const unsubCategories = onSnapshot(collection(db, 'categories'), (snapshot) => {
       const list: Category[] = [];
       snapshot.forEach(d => {
-        list.push(d.data() as Category);
+        list.push({ ...d.data(), id: d.id } as Category);
       });
+      console.log(`[onSnapshot] categories updated: ${list.length} docs found.`);
       if (list.length > 0 || isCloudReady) {
         setCategories(list);
       }
     }, (err) => {
+      console.error("onSnapshot error for categories:", err);
       handleFirestoreError(err, OperationType.GET, 'categories');
     });
 
     const unsubProducts = onSnapshot(collection(db, 'products'), (snapshot) => {
       const list: Product[] = [];
       snapshot.forEach(d => {
-        list.push(d.data() as Product);
+        list.push({ ...d.data(), id: d.id } as Product);
       });
+      console.log(`[onSnapshot] products updated: ${list.length} docs found.`);
       if (list.length > 0 || isCloudReady) {
         setProducts(list);
       }
     }, (err) => {
+      console.error("onSnapshot error for products:", err);
       handleFirestoreError(err, OperationType.GET, 'products');
     });
 
     const unsubSales = onSnapshot(collection(db, 'sales'), (snapshot) => {
       const list: Sale[] = [];
       snapshot.forEach(d => {
-        list.push(d.data() as Sale);
+        list.push({ ...d.data(), id: d.id } as Sale);
       });
       list.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+      console.log(`[onSnapshot] sales updated: ${list.length} docs found.`);
       if (list.length > 0 || isCloudReady) {
         setSales(list);
       }
     }, (err) => {
+      console.error("onSnapshot error for sales:", err);
       handleFirestoreError(err, OperationType.GET, 'sales');
     });
 
     const unsubExpenses = onSnapshot(collection(db, 'expenses'), (snapshot) => {
       const list: Expense[] = [];
       snapshot.forEach(d => {
-        list.push(d.data() as Expense);
+        list.push({ ...d.data(), id: d.id } as Expense);
       });
+      console.log(`[onSnapshot] expenses updated: ${list.length} docs found.`);
       if (list.length > 0 || isCloudReady) {
         setExpenses(list);
       }
     }, (err) => {
+      console.error("onSnapshot error for expenses:", err);
       handleFirestoreError(err, OperationType.GET, 'expenses');
     });
 
     const unsubBatches = onSnapshot(collection(db, 'productionBatches'), (snapshot) => {
       const list: ProductionBatch[] = [];
       snapshot.forEach(d => {
-        list.push(d.data() as ProductionBatch);
+        list.push({ ...d.data(), id: d.id } as ProductionBatch);
       });
       list.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+      console.log(`[onSnapshot] productionBatches updated: ${list.length} docs found.`);
       if (list.length > 0 || isCloudReady) {
         setProductionBatches(list);
       }
     }, (err) => {
+      console.error("onSnapshot error for productionBatches:", err);
       handleFirestoreError(err, OperationType.GET, 'productionBatches');
     });
 
     const unsubRecipes = onSnapshot(collection(db, 'recipes'), (snapshot) => {
       const list: Recipe[] = [];
       snapshot.forEach(d => {
-        list.push(d.data() as Recipe);
+        list.push({ ...d.data(), id: d.id } as Recipe);
       });
+      console.log(`[onSnapshot] recipes updated: ${list.length} docs found.`);
       if (list.length > 0 || isCloudReady) {
         setRecipes(list);
       }
     }, (err) => {
+      console.error("onSnapshot error for recipes:", err);
       handleFirestoreError(err, OperationType.GET, 'recipes');
     });
 
     const unsubSmartLogs = onSnapshot(collection(db, 'smartProductionLogs'), (snapshot) => {
       const list: SmartProductionLog[] = [];
       snapshot.forEach(d => {
-        list.push(d.data() as SmartProductionLog);
+        list.push({ ...d.data(), id: d.id } as SmartProductionLog);
       });
       list.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+      console.log(`[onSnapshot] smartProductionLogs updated: ${list.length} docs found.`);
       if (list.length > 0 || isCloudReady) {
         setSmartProductionLogs(list);
       }
     }, (err) => {
+      console.error("onSnapshot error for smartProductionLogs:", err);
       handleFirestoreError(err, OperationType.GET, 'smartProductionLogs');
     });
 
     return () => {
+      console.log("Cleaning up and unmounting Firestore live listeners...");
       unsubCategories();
       unsubProducts();
       unsubSales();
@@ -771,17 +788,29 @@ export const BiomateProvider: React.FC<{ children: React.ReactNode }> = ({ child
   };
 
   const deleteCategory = (id: string) => {
-    setCategories(prev => prev.filter(c => c.id !== id));
+    console.log(`[deleteCategory] Called for ID: "${id}"`);
+    setCategories(prev => {
+      const filtered = prev.filter(c => c.id !== id);
+      console.log(`[deleteCategory] Local state filtered. Remaining count: ${filtered.length}. Removals:`, prev.filter(c => c.id === id));
+      return filtered;
+    });
+    
+    console.log(`[deleteCategory] Dispatching permanent deletion from Firestore...`);
     removeDoc('categories', id);
+
     // Set associated products categories to empty string if deleted
-    setProducts(prev => prev.map(p => {
-      if (p.categoryId === id) {
-        const updatedProd = { ...p, categoryId: '' };
-        saveDoc('products', p.id, updatedProd);
-        return updatedProd;
-      }
-      return p;
-    }));
+    setProducts(prev => {
+      console.log(`[deleteCategory] Scanning products to update associations...`);
+      return prev.map(p => {
+        if (p.categoryId === id) {
+          console.log(`[deleteCategory] Auto-clearing category field on product: "${p.name}" (ID: ${p.id})`);
+          const updatedProd = { ...p, categoryId: '' };
+          saveDoc('products', p.id, updatedProd);
+          return updatedProd;
+        }
+        return p;
+      });
+    });
   };
 
   const addProduct = (prod: Omit<Product, 'id'>) => {

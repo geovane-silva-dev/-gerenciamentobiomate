@@ -26,6 +26,7 @@ try {
 }
 
 export const db = firestoreDb; /* CRITICAL: The app will break without this line */
+export const isMockFirebase = !firebaseConfig.apiKey || firebaseConfig.apiKey.includes('mock') || firebaseConfig.apiKey === '';
 export const auth = getAuth(app);
 
 async function testConnection() {
