@@ -520,16 +520,49 @@ export default function SmartProductionView() {
                   <select
                     value={runRecipeId}
                     onChange={(e) => setRunRecipeId(e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-800 dark:text-slate-100 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-800 dark:text-slate-100 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 font-bold"
                   >
-                    {recipes.map(r => {
-                      const prodCheck = products.find(p => p.id === r.productId);
+                    <option value="">Selecione o Insumo/Produto...</option>
+                    {categories.map(cat => {
+                      const catRecipes = recipes.filter(r => {
+                        const prodCheck = products.find(p => p.id === r.productId);
+                        return prodCheck?.categoryId === cat.id;
+                      });
+                      if (catRecipes.length === 0) return null;
                       return (
-                        <option key={r.id} value={r.id}>
-                          {r.name} ({prodCheck?.unit || 'unidades'})
-                        </option>
+                        <optgroup key={cat.id} label={cat.name} className="font-extrabold text-[#00965e]">
+                          {catRecipes.map(r => {
+                            const prodCheck = products.find(p => p.id === r.productId);
+                            return (
+                              <option key={r.id} value={r.id} className="font-sans font-semibold text-slate-800">
+                                {r.name} ({prodCheck?.unit || 'unidades'})
+                              </option>
+                            );
+                          })}
+                        </optgroup>
                       );
                     })}
+                    {(() => {
+                      const validCatIds = new Set(categories.map(c => c.id));
+                      const unassignedRecipes = recipes.filter(r => {
+                        const prodCheck = products.find(p => p.id === r.productId);
+                        return !prodCheck?.categoryId || !validCatIds.has(prodCheck.categoryId);
+                      });
+                      if (unassignedRecipes.length > 0) {
+                        return (
+                          <optgroup label="Sem Categoria Definida" className="font-extrabold text-gray-500">
+                            {unassignedRecipes.map(r => {
+                              const prodCheck = products.find(p => p.id === r.productId);
+                              return (
+                                <option key={r.id} value={r.id} className="font-sans font-semibold text-slate-800">
+                                  {r.name} ({prodCheck?.unit || 'unidades'})
+                                </option>
+                              );
+                            })}
+                          </optgroup>
+                        );
+                      }
+                    })()}
                   </select>
                 </div>
 
@@ -882,14 +915,37 @@ export default function SmartProductionView() {
                   value={recipeProductId}
                   onChange={(e) => setRecipeProductId(e.target.value)}
                   disabled={!!selectedRecipeForEdit}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-800 dark:text-slate-150 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 disabled:bg-slate-50 dark:disabled:bg-slate-800 disabled:cursor-not-allowed font-semibold"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-800 dark:text-slate-150 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 disabled:bg-slate-50 dark:disabled:bg-slate-800 disabled:cursor-not-allowed font-bold"
                 >
                   <option value="">Selecione o Produto Final...</option>
-                  {finalProducts.map(p => (
-                    <option key={p.id} value={p.id}>
-                      {p.imageUrl} {p.name} ({p.unit})
-                    </option>
-                  ))}
+                  {categories.map(cat => {
+                    const catProducts = finalProducts.filter(p => p.categoryId === cat.id);
+                    if (catProducts.length === 0) return null;
+                    return (
+                      <optgroup key={cat.id} label={cat.name} className="font-extrabold text-[#00965e]">
+                        {catProducts.map(p => (
+                          <option key={p.id} value={p.id} className="font-sans font-semibold text-slate-800">
+                            {p.imageUrl} {p.name} ({p.unit})
+                          </option>
+                        ))}
+                      </optgroup>
+                    );
+                  })}
+                  {(() => {
+                    const validCatIds = new Set(categories.map(c => c.id));
+                    const unassigned = finalProducts.filter(p => !p.categoryId || !validCatIds.has(p.categoryId));
+                    if (unassigned.length > 0) {
+                      return (
+                        <optgroup label="Sem Categoria Definida" className="font-extrabold text-slate-500">
+                          {unassigned.map(p => (
+                            <option key={p.id} value={p.id} className="font-sans font-semibold text-slate-800">
+                              {p.imageUrl} {p.name} ({p.unit})
+                            </option>
+                          ))}
+                        </optgroup>
+                      );
+                    }
+                  })()}
                 </select>
               </div>
 

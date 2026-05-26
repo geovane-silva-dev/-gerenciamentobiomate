@@ -79,6 +79,35 @@ export default function InventoryView() {
     });
   }, [products, searchTerm, stockLevelFilter, categoryFilter]);
 
+  // Group filtered products by category
+  const productsByCategory = useMemo(() => {
+    const groups: { category: { id: string; name: string; description?: string } | null; products: Product[] }[] = [];
+
+    // For each category, get its matching products
+    categories.forEach(cat => {
+      const catProducts = filteredProducts.filter(p => p.categoryId === cat.id);
+      if (catProducts.length > 0) {
+        groups.push({ category: cat, products: catProducts });
+      }
+    });
+
+    // Also get products that do not belong to any valid category
+    const validCategoryIds = new Set(categories.map(c => c.id));
+    const unassignedProducts = filteredProducts.filter(p => !p.categoryId || !validCategoryIds.has(p.categoryId));
+    if (unassignedProducts.length > 0) {
+      groups.push({
+        category: {
+          id: 'unassigned',
+          name: 'Sem Categoria Definida',
+          description: 'Produtos temporariamente desvinculados ou que pertenciam a categorias excluídas.'
+        },
+        products: unassignedProducts
+      });
+    }
+
+    return groups;
+  }, [categories, filteredProducts]);
+
   // Aggregate stats
   const stats = useMemo(() => {
     const totalItems = products.reduce((acc, p) => acc + p.stock, 0);
@@ -262,113 +291,127 @@ export default function InventoryView() {
         </div>
       </div>
 
-      {/* Main Stock Levels table */}
-      <div className="bg-white dark:bg-[#122c24] rounded-2xl border border-emerald-900/5 dark:border-emerald-800/10 shadow-sm overflow-hidden">
-        <div className="p-5 border-b border-gray-50 dark:border-emerald-950/40 flex items-center justify-between">
-          <h3 className="font-bold text-gray-800 dark:text-emerald-50 text-base">Posições Físicas em Estoque</h3>
-          <span className="text-xs font-semibold text-gray-500">Exibindo {filteredProducts.length} registros</span>
-        </div>
+      {/* Grouped Stock View By Category */}
+      <div className="space-y-8 animate-fade-in">
+        {productsByCategory.length === 0 ? (
+          <div className="bg-white dark:bg-[#122c24] p-12 text-center text-gray-400 dark:text-emerald-400/50 rounded-2xl border border-emerald-900/5 dark:border-emerald-800/10 shadow-sm">
+            Nenhum insumo ou produto em estoque atende a esses filtros de pesquisa.
+          </div>
+        ) : (
+          productsByCategory.map(({ category, products: groupProds }) => {
+            return (
+              <div 
+                key={category?.id} 
+                className="bg-white dark:bg-[#122c24] rounded-3xl border border-emerald-900/5 dark:border-emerald-800/15 shadow-sm p-6 space-y-4"
+              >
+                {/* Category Group Header */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-gray-100 dark:border-emerald-950/60 pb-3 gap-2">
+                  <div className="space-y-0.5">
+                    <div className="flex items-center gap-2">
+                      <span className="text-base font-bold text-gray-800 dark:text-emerald-50">
+                        {category?.name}
+                      </span>
+                      <span className="text-[10px] font-extrabold px-2.5 py-0.5 rounded-full bg-emerald-50 dark:bg-emerald-950/60 text-emerald-800 dark:text-[#00C984] border border-[#00C984]/15">
+                        {groupProds.length} {groupProds.length === 1 ? 'item' : 'itens'}
+                      </span>
+                    </div>
+                    {category?.description && (
+                      <p className="text-xs text-gray-400 dark:text-[#8A9F9A] max-w-2xl leading-relaxed">
+                        {category.description}
+                      </p>
+                    )}
+                  </div>
+                </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="bg-[#F0FAF7] dark:bg-emerald-950/50 text-gray-500 dark:text-emerald-300 text-xs font-bold uppercase border-b border-emerald-900/5 dark:border-emerald-800/20">
-                <th className="p-4">Cód / SKU</th>
-                <th className="p-4">Produto de Insumo</th>
-                <th className="p-4">Categoria</th>
-                <th className="p-4 text-center">Nível de Armazenamento</th>
-                <th className="p-4 text-center">Volume em Saldo</th>
-                <th className="p-4 text-right">Ajuste Manual Rápido</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredProducts.length === 0 ? (
-                <tr>
-                  <td colSpan={6} className="p-8 text-center text-gray-400 dark:text-emerald-400/50 text-sm">
-                    Nenhum insumo encontrado para os filtros e pesquisas ativas.
-                  </td>
-                </tr>
-              ) : (
-                filteredProducts.map(p => {
-                  const cat = categories.find(c => c.id === p.categoryId);
-                  const isCritical = p.stock <= p.minStock;
-                  
-                  // Compute dynamic visual level bar
-                  const totalEstCapacity = p.minStock * 4; // estimation of safe max capacity for scale
-                  const pctFilled = Math.min(100, Math.round((p.stock / totalEstCapacity) * 100));
+                {/* Sub-table for this category */}
+                <div className="overflow-x-auto rounded-xl border border-emerald-500/5 dark:border-emerald-950">
+                  <table className="w-full text-left border-collapse">
+                    <thead>
+                      <tr className="bg-[#F0FAF7] dark:bg-emerald-950/30 text-gray-500 dark:text-emerald-300 text-xs font-bold uppercase border-b border-emerald-900/5 dark:border-emerald-800/20">
+                        <th className="p-3 w-16 text-center">Ícone</th>
+                        <th className="p-3">Código SKU</th>
+                        <th className="p-3">Produto de Insumo</th>
+                        <th className="p-3 text-center">Nível de Armazenamento</th>
+                        <th className="p-3 text-center">Volume em Saldo</th>
+                        <th className="p-3 text-right">Ajuste Rápido</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {groupProds.map(p => {
+                        const isCritical = p.stock <= p.minStock;
+                        
+                        // Compute dynamic visual level bar
+                        const totalEstCapacity = p.minStock * 4; // estimation of safe max capacity for scale
+                        const pctFilled = Math.min(100, Math.round((p.stock / totalEstCapacity) * 100));
 
-                  return (
-                    <tr
-                      key={p.id}
-                      className="border-b border-emerald-900/5 dark:border-emerald-800/10 hover:bg-[#F0FAF7]/40 dark:hover:bg-emerald-950/20 text-sm text-gray-700 dark:text-emerald-100 transition-colors"
-                    >
-                      <td className="p-4 font-mono text-xs text-gray-500">{p.sku}</td>
-                      <td className="p-4">
-                        <div className="flex items-center gap-3">
-                          <span className="text-lg bg-[#E5FAF2] dark:bg-emerald-950/40 p-1 rounded-lg">{p.imageUrl || '🧪'}</span>
-                          <span className="font-bold text-gray-850 dark:text-white">{p.name}</span>
-                        </div>
-                      </td>
-                      <td className="p-4 text-xs">
-                        <span className="bg-gray-100 dark:bg-emerald-950/40 text-gray-600 dark:text-emerald-300 px-2 py-0.5 rounded-full font-medium">
-                          {cat ? cat.name : 'N/D'}
-                        </span>
-                      </td>
-                      <td className="p-4">
-                        <div className="flex items-center justify-center gap-2 max-w-xs mx-auto">
-                          <div className="w-24 bg-gray-100 dark:bg-emerald-950/60 rounded-full h-2.5 overflow-hidden">
-                            <div
-                              className={`h-full rounded-full transition-all duration-500 ${
-                                isCritical ? 'bg-rose-500' : 'bg-emerald-500'
-                              }`}
-                              style={{ width: `${p.stock === 0 ? 0 : Math.max(12, pctFilled)}%` }}
-                            />
-                          </div>
-                          <span className="text-[11px] font-mono font-bold text-gray-500">{pctFilled}%</span>
-                        </div>
-                      </td>
-                      <td className="p-4 text-center">
-                        <div className="flex flex-col items-center">
-                          <span className={`font-mono font-extrabold text-base ${isCritical ? 'text-rose-500' : 'text-emerald-800 dark:text-[#00C984]'}`}>
-                            {p.stock}
-                          </span>
-                          <span className="text-[10px] text-gray-400">mínimo: {p.minStock} {p.unit}</span>
-                        </div>
-                      </td>
-                      <td className="p-4 text-right">
-                        <div className="flex gap-1.5 justify-end items-center">
-                          <button
-                            onClick={() => handleOpenAdjust(p, 'entrada')}
-                            className="bg-emerald-50 hover:bg-[#E5FAF2] dark:bg-emerald-950/30 dark:hover:bg-[#00C984]/15 text-emerald-800 dark:text-[#00C984] p-1.5 rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer"
-                            title="Entrada manual de insumos"
+                        return (
+                          <tr
+                            key={p.id}
+                            className="border-b border-emerald-900/5 dark:border-emerald-800/10 hover:bg-[#F0FAF7]/40 dark:hover:bg-emerald-950/20 text-sm text-gray-700 dark:text-emerald-100 transition-colors"
                           >
-                            <ArrowUpRight className="w-4 h-4" />
-                            <span>Entrada</span>
-                          </button>
-                          <button
-                            onClick={() => handleOpenAdjust(p, 'saida')}
-                            className="bg-rose-50 hover:bg-rose-100/50 dark:bg-rose-950/20 dark:hover:bg-rose-950/40 text-rose-600 p-1.5 rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer"
-                            title="Descarte técnico/Ajuste voluntário"
-                          >
-                            <ArrowDownLeft className="w-4 h-4" />
-                            <span>Saída</span>
-                          </button>
-                          <button
-                            onClick={() => handleDeleteProduct(p.id, p.name)}
-                            className="p-1.5 rounded-lg text-rose-550 dark:text-rose-450 hover:bg-rose-50 dark:hover:bg-rose-950/20 transition-all cursor-pointer"
-                            title="Excluir item definitivamente"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
+                            <td className="p-3 text-center text-xl bg-[#F8FDFC] dark:bg-emerald-950/10 rounded-l-lg">{p.imageUrl || '🧪'}</td>
+                            <td className="p-3 font-mono text-xs text-gray-500">{p.sku}</td>
+                            <td className="p-3 font-bold text-gray-800 dark:text-white">
+                              <span className="font-bold text-gray-850 dark:text-white">{p.name}</span>
+                            </td>
+                            <td className="p-3">
+                              <div className="flex items-center justify-center gap-2 max-w-xs mx-auto">
+                                <div className="w-24 bg-gray-100 dark:bg-emerald-950/60 rounded-full h-2.5 overflow-hidden">
+                                  <div
+                                    className={`h-full rounded-full transition-all duration-500 ${
+                                      isCritical ? 'bg-rose-500' : 'bg-emerald-500'
+                                    }`}
+                                    style={{ width: `${p.stock === 0 ? 0 : Math.max(12, pctFilled)}%` }}
+                                  />
+                                </div>
+                                <span className="text-[11px] font-mono font-bold text-gray-500">{pctFilled}%</span>
+                              </div>
+                            </td>
+                            <td className="p-3 text-center">
+                              <div className="flex flex-col items-center">
+                                <span className={`font-mono font-extrabold text-base ${isCritical ? 'text-rose-500' : 'text-emerald-800 dark:text-[#00C984]'}`}>
+                                  {p.stock}
+                                </span>
+                                <span className="text-[10px] text-gray-400">mínimo: {p.minStock} {p.unit}</span>
+                              </div>
+                            </td>
+                            <td className="p-3 text-right rounded-r-lg">
+                              <div className="flex gap-1.5 justify-end items-center font-bold">
+                                <button
+                                  onClick={() => handleOpenAdjust(p, 'entrada')}
+                                  className="bg-[#E5FAF2] hover:bg-emerald-100 text-[#008F5D] border border-emerald-500/10 dark:bg-emerald-950/30 dark:hover:bg-emerald-950/50 p-1.5 rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer"
+                                  title="Entrada manual de insumos"
+                                >
+                                  <ArrowUpRight className="w-4 h-4" />
+                                  <span>Entrada</span>
+                                </button>
+                                <button
+                                  onClick={() => handleOpenAdjust(p, 'saida')}
+                                  className="bg-rose-50 hover:bg-rose-100 text-rose-600 dark:bg-rose-950/20 dark:hover:bg-rose-950/30 p-1.5 rounded-lg text-xs font-bold flex items-center gap-1 cursor-pointer"
+                                  title="Descarte técnico/Ajuste voluntário"
+                                >
+                                  <ArrowDownLeft className="w-4 h-4" />
+                                  <span>Saída</span>
+                                </button>
+                                <button
+                                  onClick={() => handleDeleteProduct(p.id, p.name)}
+                                  className="p-1.5 rounded-lg text-rose-550 dark:text-rose-455 hover:bg-rose-50 dark:hover:bg-rose-950/25 transition-all cursor-pointer"
+                                  title="Excluir item definitivamente"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            );
+          })
+        )}
       </div>
 
       {/* Physical Audit Transactions History Log */}

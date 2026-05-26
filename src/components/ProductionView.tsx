@@ -23,6 +23,7 @@ export default function ProductionView() {
   const {
     productionBatches,
     products,
+    categories,
     registerProductionBatch,
     deleteProductionBatch,
     concludeProductionBatch,
@@ -324,11 +325,37 @@ export default function ProductionView() {
                 <select
                   value={productId}
                   onChange={(e) => handleProductChange(e.target.value)}
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-gray-100 dark:border-emerald-950 bg-[#F8FDFC] dark:bg-emerald-950/20 text-gray-800 dark:text-white"
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-gray-100 dark:border-emerald-950 bg-[#F8FDFC] dark:bg-emerald-950/20 text-gray-800 dark:text-white font-bold"
                 >
-                  {products.map(p => (
-                    <option key={p.id} value={p.id}>{p.name} ({p.unit}) - estoque atual: {p.stock}</option>
-                  ))}
+                  <option value="">Selecione o Insumo/Produto...</option>
+                  {categories.map(cat => {
+                    const catProducts = products.filter(p => p.categoryId === cat.id);
+                    if (catProducts.length === 0) return null;
+                    return (
+                      <optgroup key={cat.id} label={cat.name} className="font-extrabold text-[#00965e]">
+                        {catProducts.map(p => (
+                          <option key={p.id} value={p.id} className="font-sans font-medium text-slate-800">
+                            {p.name} ({p.unit}) - estoque atual: {p.stock}
+                          </option>
+                        ))}
+                      </optgroup>
+                    );
+                  })}
+                  {(() => {
+                    const validCatIds = new Set(categories.map(c => c.id));
+                    const unassigned = products.filter(p => !p.categoryId || !validCatIds.has(p.categoryId));
+                    if (unassigned.length > 0) {
+                      return (
+                        <optgroup label="Sem Categoria Definida" className="font-extrabold text-gray-500">
+                          {unassigned.map(p => (
+                            <option key={p.id} value={p.id} className="font-sans font-medium text-slate-800">
+                              {p.name} ({p.unit}) - estoque atual: {p.stock}
+                            </option>
+                          ))}
+                        </optgroup>
+                      );
+                    }
+                  })()}
                 </select>
               </div>
 

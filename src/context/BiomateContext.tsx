@@ -284,6 +284,7 @@ export const BiomateProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const [showProductionCostToggle, setShowProductionCostToggle] = useState<boolean>(true);
   const [showFixedExpensesToggle, setShowFixedExpensesToggle] = useState<boolean>(true);
   const [clientFilter, setClientFilter] = useState<string>('all');
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => auth.currentUser !== null);
 
   // Accessible custom confirmation modal states
   const [confirmConfig, setConfirmConfig] = useState<{
@@ -335,7 +336,7 @@ export const BiomateProvider: React.FC<{ children: React.ReactNode }> = ({ child
   // Seed default data to Firestore if it is a real connection and is empty
   useEffect(() => {
     const seedFirestoreIfEmpty = async () => {
-      if (isMockFirebase) return;
+      if (isMockFirebase || !isAuthenticated) return;
       try {
         const { getDocs, query, limit } = await import('firebase/firestore');
         const snap = await getDocs(query(collection(db, 'categories'), limit(1)));
@@ -369,22 +370,26 @@ export const BiomateProvider: React.FC<{ children: React.ReactNode }> = ({ child
       }
     };
     seedFirestoreIfEmpty();
-  }, [isMockFirebase]);
+  }, [isMockFirebase, isAuthenticated]);
 
   // Auth anonymous state
   useEffect(() => {
-    onAuthStateChanged(auth, (user) => {
-      if (!user) {
+    const unsubAuth = onAuthStateChanged(auth, (user) => {
+      if (user) {
+        setIsAuthenticated(true);
+      } else {
+        setIsAuthenticated(false);
         signInAnonymously(auth).catch((err) => {
           console.warn("Anonymous sign-in not enabled or failed:", err);
         });
       }
     });
+    return unsubAuth;
   }, []);
 
   // Live Firestore listeners
   useEffect(() => {
-    if (isMockFirebase) return;
+    if (isMockFirebase || !isAuthenticated) return;
 
     const unsubCategories = onSnapshot(collection(db, 'categories'), (snapshot) => {
       const list: Category[] = [];
@@ -395,7 +400,7 @@ export const BiomateProvider: React.FC<{ children: React.ReactNode }> = ({ child
         setCategories(list);
       }
     }, (err) => {
-      console.warn("Firestore categories snap error:", err);
+      handleFirestoreError(err, OperationType.GET, 'categories');
     });
 
     const unsubProducts = onSnapshot(collection(db, 'products'), (snapshot) => {
@@ -407,7 +412,7 @@ export const BiomateProvider: React.FC<{ children: React.ReactNode }> = ({ child
         setProducts(list);
       }
     }, (err) => {
-      console.warn("Firestore products snap error:", err);
+      handleFirestoreError(err, OperationType.GET, 'products');
     });
 
     const unsubSales = onSnapshot(collection(db, 'sales'), (snapshot) => {
@@ -420,7 +425,7 @@ export const BiomateProvider: React.FC<{ children: React.ReactNode }> = ({ child
         setSales(list);
       }
     }, (err) => {
-      console.warn("Firestore sales snap error:", err);
+      handleFirestoreError(err, OperationType.GET, 'sales');
     });
 
     const unsubExpenses = onSnapshot(collection(db, 'expenses'), (snapshot) => {
@@ -432,7 +437,7 @@ export const BiomateProvider: React.FC<{ children: React.ReactNode }> = ({ child
         setExpenses(list);
       }
     }, (err) => {
-      console.warn("Firestore expenses snap error:", err);
+      handleFirestoreError(err, OperationType.GET, 'expenses');
     });
 
     const unsubBatches = onSnapshot(collection(db, 'productionBatches'), (snapshot) => {
@@ -445,7 +450,7 @@ export const BiomateProvider: React.FC<{ children: React.ReactNode }> = ({ child
         setProductionBatches(list);
       }
     }, (err) => {
-      console.warn("Firestore productionBatches snap error:", err);
+      handleFirestoreError(err, OperationType.GET, 'productionBatches');
     });
 
     const unsubRecipes = onSnapshot(collection(db, 'recipes'), (snapshot) => {
@@ -457,7 +462,7 @@ export const BiomateProvider: React.FC<{ children: React.ReactNode }> = ({ child
         setRecipes(list);
       }
     }, (err) => {
-      console.warn("Firestore recipes snap error:", err);
+      handleFirestoreError(err, OperationType.GET, 'recipes');
     });
 
     const unsubSmartLogs = onSnapshot(collection(db, 'smartProductionLogs'), (snapshot) => {
@@ -470,7 +475,7 @@ export const BiomateProvider: React.FC<{ children: React.ReactNode }> = ({ child
         setSmartProductionLogs(list);
       }
     }, (err) => {
-      console.warn("Firestore smartProductionLogs snap error:", err);
+      handleFirestoreError(err, OperationType.GET, 'smartProductionLogs');
     });
 
     return () => {
@@ -482,7 +487,7 @@ export const BiomateProvider: React.FC<{ children: React.ReactNode }> = ({ child
       unsubRecipes();
       unsubSmartLogs();
     };
-  }, [isMockFirebase]);
+  }, [isMockFirebase, isAuthenticated]);
 
   // Load from LocalStorage or seed with default data
   const [categories, setCategories] = useState<Category[]>(() => {

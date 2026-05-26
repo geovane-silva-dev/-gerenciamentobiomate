@@ -31,6 +31,7 @@ export default function SalesView() {
   const {
     sales,
     products,
+    categories,
     registerSale,
     deleteSale,
     hideValues,
@@ -39,6 +40,7 @@ export default function SalesView() {
 
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedClientFilter, setSelectedClientFilter] = useState('all');
+  const [breakdownType, setBreakdownType] = useState<'product' | 'category'>('category');
 
   // Register Modal inputs
   const [modalOpen, setModalOpen] = useState(false);
@@ -110,6 +112,24 @@ export default function SalesView() {
       color: colors[i % colors.length]
     }));
   }, [filteredSales, products]);
+
+  // Recharts Chart breakdown: Faturamento por categoria
+  const categoryChartData = useMemo(() => {
+    const data: { [name: string]: number } = {};
+    filteredSales.forEach(s => {
+      const prod = products.find(p => p.id === s.productId);
+      const cat = prod ? categories.find(c => c.id === prod.categoryId) : null;
+      const name = cat ? cat.name : 'Sem Categoria';
+      data[name] = (data[name] || 0) + s.totalAmount;
+    });
+
+    const colors = ['#00C984', '#FFA800', '#00965e', '#59391D', '#FF4E4E', '#800080'];
+    return Object.keys(data).map((key, i) => ({
+      name: key,
+      value: data[key],
+      color: colors[i % colors.length]
+    }));
+  }, [filteredSales, products, categories]);
 
   const handleOpenAdd = () => {
     const firstProd = products[0];
@@ -342,20 +362,50 @@ export default function SalesView() {
 
         {/* Faturamento consolidado por produto Recharts pie chart */}
         <div className="bg-white dark:bg-[#122c24] p-5 rounded-2xl border border-emerald-900/5 dark:border-emerald-800/10 shadow-sm flex flex-col justify-between">
-          <div>
-            <h3 className="font-bold text-gray-800 dark:text-emerald-50 text-base">Fração por Produto</h3>
-            <p className="text-[10px] text-gray-450 dark:text-emerald-400/60 mt-0.5 uppercase font-medium">COMPOSIÇÃO CONSOLIDADA DA RECEITA BRUTA</p>
+          <div className="flex justify-between items-start gap-2">
+            <div>
+              <h3 className="font-bold text-gray-800 dark:text-emerald-50 text-base">
+                {breakdownType === 'category' ? 'Fração por Categoria' : 'Fração por Produto'}
+              </h3>
+              <p className="text-[10px] text-gray-450 dark:text-emerald-400/60 mt-0.5 uppercase font-medium">COMPOSIÇÃO CONSOLIDADA DA RECEITA BRUTA</p>
+            </div>
+            
+            {/* Toggle Switch pills */}
+            <div className="flex bg-[#F0FAF7] dark:bg-emerald-950/40 p-0.5 rounded-lg border border-emerald-500/5 shrink-0">
+              <button
+                type="button"
+                onClick={() => setBreakdownType('category')}
+                className={`px-2.5 py-1 rounded-md text-[10px] font-extrabold uppercase transition-all cursor-pointer ${
+                  breakdownType === 'category'
+                    ? 'bg-[#00C984] text-[#022A1E]'
+                    : 'text-gray-400 hover:text-gray-600 dark:hover:text-emerald-250'
+                }`}
+              >
+                Cat
+              </button>
+              <button
+                type="button"
+                onClick={() => setBreakdownType('product')}
+                className={`px-2.5 py-1 rounded-md text-[10px] font-extrabold uppercase transition-all cursor-pointer ${
+                  breakdownType === 'product'
+                    ? 'bg-[#00C984] text-[#022A1E]'
+                    : 'text-gray-400 hover:text-gray-600 dark:hover:text-emerald-250'
+                }`}
+              >
+                Prod
+              </button>
+            </div>
           </div>
 
           <div className="w-full h-56 relative flex items-center justify-center my-4">
-            {productChartData.length === 0 ? (
+            {(breakdownType === 'category' ? categoryChartData : productChartData).length === 0 ? (
               <div className="text-xs text-gray-400 text-center uppercase">Sem dados faturados</div>
             ) : (
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Tooltip formatter={(value: any) => formatBRL(value, hideValues)} />
                   <Pie
-                    data={productChartData}
+                    data={breakdownType === 'category' ? categoryChartData : productChartData}
                     cx="50%"
                     cy="50%"
                     innerRadius={55}
@@ -363,7 +413,7 @@ export default function SalesView() {
                     paddingAngle={4}
                     dataKey="value"
                   >
-                    {productChartData.map((entry, index) => (
+                    {(breakdownType === 'category' ? categoryChartData : productChartData).map((entry, index) => (
                       <Cell key={`cell-${index}`} fill={entry.color} />
                     ))}
                   </Pie>
@@ -374,7 +424,7 @@ export default function SalesView() {
 
           {/* Color Indicators list */}
           <div className="space-y-2 max-h-40 overflow-y-auto">
-            {productChartData.map((item, i) => (
+            {(breakdownType === 'category' ? categoryChartData : productChartData).map((item, i) => (
               <div key={i} className="flex items-center justify-between text-xs font-semibold">
                 <span className="flex items-center gap-2 text-gray-500 dark:text-emerald-250">
                   <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: item.color }} />
@@ -429,11 +479,37 @@ export default function SalesView() {
                   <select
                     value={productId}
                     onChange={(e) => handleProductChange(e.target.value)}
-                    className="w-full px-3.5 py-2.5 rounded-xl border border-gray-100 dark:border-emerald-950 bg-[#F8FDFC] dark:bg-emerald-950/20 text-gray-800 dark:text-white"
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-gray-100 dark:border-emerald-950 bg-[#F8FDFC] dark:bg-emerald-950/20 text-gray-800 dark:text-white font-bold"
                   >
-                    {products.map(p => (
-                      <option key={p.id} value={p.id}>{p.name} (estoque: {p.stock} {p.unit})</option>
-                    ))}
+                    <option value="">Selecione o Insumo/Produto...</option>
+                    {categories.map(cat => {
+                      const catProducts = products.filter(p => p.categoryId === cat.id);
+                      if (catProducts.length === 0) return null;
+                      return (
+                        <optgroup key={cat.id} label={cat.name} className="font-extrabold text-[#00965e]">
+                          {catProducts.map(p => (
+                            <option key={p.id} value={p.id} className="font-sans font-medium text-slate-800">
+                              {p.name} (estoque: {p.stock} {p.unit})
+                            </option>
+                          ))}
+                        </optgroup>
+                      );
+                    })}
+                    {(() => {
+                      const validCatIds = new Set(categories.map(c => c.id));
+                      const unassigned = products.filter(p => !p.categoryId || !validCatIds.has(p.categoryId));
+                      if (unassigned.length > 0) {
+                        return (
+                          <optgroup label="Sem Categoria Definida" className="font-extrabold text-gray-500">
+                            {unassigned.map(p => (
+                              <option key={p.id} value={p.id} className="font-sans font-medium text-slate-800">
+                                {p.name} (estoque: {p.stock} {p.unit})
+                              </option>
+                            ))}
+                          </optgroup>
+                        );
+                      }
+                    })()}
                   </select>
                 </div>
 
