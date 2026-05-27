@@ -44,6 +44,7 @@ export default function SmartProductionView() {
   // Recipe form state
   const [recipeProductId, setRecipeProductId] = useState('');
   const [recipeName, setRecipeName] = useState('');
+  const [recipeDescription, setRecipeDescription] = useState('');
   const [recipeIngredients, setRecipeIngredients] = useState<{ productId: string; quantityNeeded: number; tempCategoryId?: string }[]>([
     { productId: '', quantityNeeded: 1, tempCategoryId: '' }
   ]);
@@ -160,6 +161,7 @@ export default function SmartProductionView() {
       setSelectedRecipeForEdit(recipeToEdit);
       setRecipeProductId(recipeToEdit.productId);
       setRecipeName(recipeToEdit.name);
+      setRecipeDescription(recipeToEdit.description || '');
       setRecipeIngredients(recipeToEdit.ingredients.map(ing => {
         const prod = products.find(p => p.id === ing.productId);
         return {
@@ -174,6 +176,7 @@ export default function SmartProductionView() {
       const missingFormulaProduct = finalProducts.find(p => !recipes.some(r => r.productId === p.id));
       setRecipeProductId(missingFormulaProduct?.id || finalProducts[0]?.id || '');
       setRecipeName('');
+      setRecipeDescription('');
       
       const firstIng = ingredientProducts[0];
       setRecipeIngredients([{ 
@@ -228,7 +231,8 @@ export default function SmartProductionView() {
     const recipeData = {
       productId: recipeProductId,
       name: finalRecipeName,
-      ingredients: recipeIngredients
+      ingredients: recipeIngredients,
+      description: recipeDescription
     };
 
     if (selectedRecipeForEdit) {
@@ -731,6 +735,11 @@ export default function SmartProductionView() {
                           <div>
                             <h3 className="font-extrabold text-slate-800 dark:text-slate-100">{finalProduct?.name}</h3>
                             <p className="text-xs font-mono text-slate-400">SKU: {finalProduct?.sku}</p>
+                            {recipe.description && (
+                              <p className="text-[11px] text-slate-500 dark:text-slate-400 italic mt-0.5 max-w-[285px] leading-snug whitespace-pre-wrap">
+                                {recipe.description}
+                              </p>
+                            )}
                           </div>
                         </div>
                         <div className="flex gap-1">
@@ -957,6 +966,18 @@ export default function SmartProductionView() {
                   value={recipeName}
                   onChange={(e) => setRecipeName(e.target.value)}
                   className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-800 dark:text-slate-100 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                />
+              </div>
+
+              {/* Description formula input */}
+              <div>
+                <label className="block text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide mb-1">Descrição da Fórmula (Opcional)</label>
+                <textarea
+                  rows={2}
+                  placeholder="Ex: Mistura aromática com toque de capim limão e notas de gengibre moído fresco..."
+                  value={recipeDescription}
+                  onChange={(e) => setRecipeDescription(e.target.value)}
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-800 dark:text-slate-100 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500/20 resize-none"
                 />
               </div>
 

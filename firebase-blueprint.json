@@ -26,7 +26,8 @@
         "minStock": { "type": "number" },
         "imageUrl": { "type": "string" },
         "unit": { "type": "string" },
-        "productType": { "type": "string", "enum": ["Produto Final", "Insumo", "Ambos"] }
+        "productType": { "type": "string", "enum": ["Produto Final", "Insumo", "Ambos"] },
+        "description": { "type": "string" }
       },
       "required": ["id", "name", "sku", "categoryId", "price", "costPrice", "stock", "minStock", "unit"]
     },
@@ -96,9 +97,10 @@
         "name": { "type": "string" },
         "ingredients": {
           "type": "array"
-        }
+        },
+        "description": { "type": "string" }
       },
-      "required": ["id", "productId", "name"}
+      "required": ["id", "productId", "name"]
     },
     "SmartProductionLog": {
       "title": "SmartProductionLog",
@@ -127,6 +129,33 @@
         "updatedAt": { "type": "string" }
       },
       "required": ["id", "email", "displayName", "photoURL", "updatedAt"]
+    },
+    "StockTransaction": {
+      "title": "StockTransaction",
+      "description": "Stock movement audit log",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "date": { "type": "string" },
+        "productId": { "type": "string" },
+        "type": { "type": "string", "enum": ["entrada", "saida"] },
+        "quantity": { "type": "number" },
+        "reason": { "type": "string" },
+        "operator": { "type": "string" }
+      },
+      "required": ["id", "date", "productId", "type", "quantity", "reason", "operator"]
+    },
+    "Announcement": {
+      "title": "Announcement",
+      "description": "Internal Board Messages",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "text": { "type": "string" },
+        "date": { "type": "string" },
+        "priority": { "type": "string", "enum": ["info", "warning", "error"] }
+      },
+      "required": ["id", "text", "date", "priority"]
     }
   },
   "firestore": {
@@ -161,6 +190,14 @@
     "smartProductionLogs": {
       "schema": "SmartProductionLog",
       "description": "Access to smart production history"
+    },
+    "stockTransactions": {
+      "schema": "StockTransaction",
+      "description": "Access to stock transactions history"
+    },
+    "internal_board": {
+      "schema": "Announcement",
+      "description": "Access to internal bulletin board messages"
     }
   }
 }

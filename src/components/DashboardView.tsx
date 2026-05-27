@@ -43,62 +43,28 @@ export default function DashboardView() {
     showFixedExpensesToggle,
     setShowFixedExpensesToggle,
     clientFilter,
-    setClientFilter
+    setClientFilter,
+    announcements,
+    addAnnouncement,
+    deleteAnnouncement
   } = useBiomate();
-
-  // Custom Announcements/Mural state
-  const [customAnnouncements, setCustomAnnouncements] = React.useState<{
-    id: string;
-    text: string;
-    date: string;
-    priority: 'info' | 'warning' | 'error';
-  }[]>(() => {
-    const saved = localStorage.getItem('biomate_custom_announcements');
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch (e) {
-        return [];
-      }
-    }
-    return [
-      {
-        id: 'seed-1',
-        text: 'Aferição periódica dos termômetros das geladeiras programada para sexta-feira.',
-        date: new Date().toLocaleDateString('pt-BR'),
-        priority: 'info' as const
-      },
-      {
-        id: 'seed-2',
-        text: 'Lote de Kombucha Alquimia Verde necessita de revisão do pH antes do envase final.',
-        date: new Date().toLocaleDateString('pt-BR'),
-        priority: 'warning' as const
-      }
-    ];
-  });
 
   const [newAnnounceText, setNewAnnounceText] = React.useState('');
   const [newAnnouncePriority, setNewAnnouncePriority] = React.useState<'info' | 'warning' | 'error'>('info');
 
-  React.useEffect(() => {
-    localStorage.setItem('biomate_custom_announcements', JSON.stringify(customAnnouncements));
-  }, [customAnnouncements]);
-
   const handleAddAnnouncement = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newAnnounceText.trim()) return;
-    const item = {
-      id: 'custom-' + Date.now(),
+    addAnnouncement({
       text: newAnnounceText.trim(),
-      date: new Date().toLocaleDateString('pt-BR'),
-      priority: newAnnouncePriority
-    };
-    setCustomAnnouncements(prev => [item, ...prev]);
+      priority: newAnnouncePriority,
+      date: new Date().toLocaleDateString('pt-BR')
+    });
     setNewAnnounceText('');
   };
 
   const handleDeleteAnnouncement = (id: string) => {
-    setCustomAnnouncements(prev => prev.filter(item => item.id !== id));
+    deleteAnnouncement(id);
   };
 
   // All unique clients list
@@ -502,12 +468,12 @@ export default function DashboardView() {
             </form>
 
             <div className="space-y-2 max-h-[160px] overflow-y-auto pr-1">
-              {customAnnouncements.length === 0 ? (
+              {announcements.length === 0 ? (
                 <div className="text-center py-6 text-xs text-slate-450 dark:text-[#8A9F9A]/40 italic">
                   Nenhum aviso fixado no momento. Use o campo acima para criar lembretes!
                 </div>
               ) : (
-                customAnnouncements.map(item => {
+                announcements.map(item => {
                   const borderPriorityClass =
                     item.priority === 'error'
                       ? 'border-l-rose-500 dark:border-l-rose-600'
@@ -552,7 +518,7 @@ export default function DashboardView() {
             </div>
           </div>
           <div className="mt-2 text-[9px] text-[#8A9F9A] italic">
-            * Notas criadas de forma local e visíveis apenas nesta sessão.
+            * Notas persistidas no Firebase Firestore em tempo real.
           </div>
         </div>
       </div>

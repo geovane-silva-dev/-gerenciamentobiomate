@@ -50,7 +50,8 @@ service cloud.firestore {
         && (data.costPrice is number || data.costPrice is int || data.costPrice is float)
         && (data.stock is number || data.stock is int)
         && (data.minStock is number || data.minStock is int)
-        && data.unit is string && data.unit.size() <= 50;
+        && data.unit is string && data.unit.size() <= 50
+        && (!data.keys().contains('description') || (data.description is string && data.description.size() <= 2000));
     }
 
     match /products/{productId} {
@@ -123,7 +124,8 @@ service cloud.firestore {
         && data.id is string && data.id.size() <= 100
         && data.productId is string && data.productId.size() <= 100
         && data.name is string && data.name.size() <= 200
-        && data.ingredients is list;
+        && data.ingredients is list
+        && (!data.keys().contains('description') || (data.description is string && data.description.size() <= 2000));
     }
 
     match /recipes/{recipeId} {
@@ -166,6 +168,41 @@ service cloud.firestore {
       allow get, list: if isSignedIn();
       allow create, update: if isSignedIn() && request.auth.uid == userId && isValidUser(incoming());
       allow delete: if false;
+    }
+
+    // ------------------ STOCK TRANSACTIONS ------------------
+    function isValidStockTransaction(data) {
+      return data.keys().hasAll(['id', 'date', 'productId', 'type', 'quantity', 'reason', 'operator'])
+        && data.keys().size() == 7
+        && data.id is string && data.id.size() <= 100
+        && data.date is string
+        && data.productId is string && data.productId.size() <= 100
+        && data.type is string && (data.type == 'entrada' || data.type == 'saida')
+        && (data.quantity is number || data.quantity is int)
+        && data.reason is string && data.reason.size() <= 1000
+        && data.operator is string && data.operator.size() <= 200;
+    }
+
+    match /stockTransactions/{transactionId} {
+      allow get, list: if isSignedIn();
+      allow create, update: if isSignedIn() && isValidStockTransaction(incoming());
+      allow delete: if isSignedIn();
+    }
+
+    // ------------------ INTERNAL BOARD ------------------
+    function isValidAnnouncement(data) {
+      return data.keys().hasAll(['id', 'text', 'date', 'priority'])
+        && data.keys().size() == 4
+        && data.id is string && data.id.size() <= 100
+        && data.text is string && data.text.size() >= 1 && data.text.size() <= 2000
+        && data.date is string
+        && data.priority is string && (data.priority == 'info' || data.priority == 'warning' || data.priority == 'error');
+    }
+
+    match /internal_board/{announcementId} {
+      allow get, list: if isSignedIn();
+      allow create, update: if isSignedIn() && isValidAnnouncement(incoming());
+      allow delete: if isSignedIn();
     }
   }
 }

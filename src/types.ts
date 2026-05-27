@@ -16,6 +16,7 @@ export interface Product {
   imageUrl?: string;
   unit: string; // e.g., "kg", "unidades", "litros"
   productType?: 'Produto Final' | 'Insumo' | 'Ambos';
+  description?: string;
 }
 
 export interface Sale {
@@ -59,6 +60,7 @@ export interface Recipe {
   productId: string; // ID check in products list
   name: string;
   ingredients: RecipeIngredient[];
+  description?: string;
 }
 
 export interface SmartProductionLog {
@@ -85,6 +87,13 @@ export interface StockTransaction {
   quantity: number;
   reason: string;
   operator: string;
+}
+
+export interface Announcement {
+  id: string;
+  text: string;
+  date: string;
+  priority: 'info' | 'warning' | 'error';
 }
 
 export type SidebarTab =

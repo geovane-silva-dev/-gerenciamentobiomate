@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { Category, Product, Sale, Expense, ProductionBatch, SidebarTab, Recipe, SmartProductionLog, StockTransaction } from '../types';
+import { Category, Product, Sale, Expense, ProductionBatch, SidebarTab, Recipe, SmartProductionLog, StockTransaction, Announcement } from '../types';
 import { db, auth, OperationType, handleFirestoreError, isMockFirebase } from '../firebase';
 import { 
   collection, 
@@ -34,6 +34,7 @@ interface BiomateContextType {
   recipes: Recipe[];
   smartProductionLogs: SmartProductionLog[];
   stockTransactions: StockTransaction[];
+  announcements: Announcement[];
 
   // CRUD actions
   addCategory: (cat: Omit<Category, 'id'>) => void;
@@ -56,6 +57,10 @@ interface BiomateContextType {
 
   addStockTransaction: (tx: Omit<StockTransaction, 'id' | 'date'> & { date?: string }) => void;
   deleteStockTransaction: (id: string) => void;
+
+  addAnnouncement: (announcement: Omit<Announcement, 'id' | 'date'> & { date?: string }) => void;
+  updateAnnouncement: (id: string, announcement: Partial<Omit<Announcement, 'id'>>) => void;
+  deleteAnnouncement: (id: string) => void;
 
   // Smart recipes and actions
   addRecipe: (recipe: Omit<Recipe, 'id'>) => void;
@@ -519,6 +524,8 @@ export const BiomateProvider: React.FC<{ children: React.ReactNode }> = ({ child
                 console.log("History empty");
                 console.log("Seed prevented");
                 console.log("History loaded:", []);
+              } else if (colName === 'internal_board') {
+                console.log("Board Loaded:", []);
               } else {
                 console.log("Firestore Load:", []);
               }
@@ -531,7 +538,7 @@ export const BiomateProvider: React.FC<{ children: React.ReactNode }> = ({ child
               
               const docs = fetchedItems;
               // Sort to maintain correct descending orders
-              if (colName === 'sales' || colName === 'productionBatches' || colName === 'smartProductionLogs' || colName === 'stockTransactions') {
+              if (colName === 'sales' || colName === 'productionBatches' || colName === 'smartProductionLogs' || colName === 'stockTransactions' || colName === 'internal_board') {
                 fetchedItems.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
               }
               
@@ -539,6 +546,8 @@ export const BiomateProvider: React.FC<{ children: React.ReactNode }> = ({ child
                 console.log("Categories Loaded:", fetchedItems);
               } else if (colName === 'stockTransactions') {
                 console.log("History loaded:", docs);
+              } else if (colName === 'internal_board') {
+                console.log("Board Loaded:", docs);
               } else {
                 console.log("Firestore Load:", fetchedItems);
               }
@@ -558,6 +567,7 @@ export const BiomateProvider: React.FC<{ children: React.ReactNode }> = ({ child
         await syncCollection('recipes', setRecipes);
         await syncCollection('smartProductionLogs', setSmartProductionLogs);
         await syncCollection('stockTransactions', setStockTransactions);
+        await syncCollection('internal_board', setAnnouncements);
 
         console.log("All collections synced successfully.");
       } catch (error) {
@@ -727,6 +737,25 @@ export const BiomateProvider: React.FC<{ children: React.ReactNode }> = ({ child
       handleFirestoreError(err, OperationType.GET, 'stockTransactions');
     });
 
+    const unsubAnnouncements = onSnapshot(collection(db, 'internal_board'), (snapshot) => {
+      const list: Announcement[] = [];
+      snapshot.forEach(d => {
+        list.push({ ...d.data(), id: d.id } as Announcement);
+      });
+      list.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+      console.log("Realtime Board:", snapshot);
+      
+      const docs = list;
+      console.log("Board Loaded:", docs);
+      
+      if (docs.length > 0 || isCloudReady) {
+        setAnnouncements(docs);
+      }
+    }, (err) => {
+      console.error("onSnapshot error for internal_board:", err);
+      handleFirestoreError(err, OperationType.GET, 'internal_board');
+    });
+
     return () => {
       console.log("Cleaning up and unmounting Firestore live listeners...");
       unsubCategories();
@@ -737,6 +766,7 @@ export const BiomateProvider: React.FC<{ children: React.ReactNode }> = ({ child
       unsubRecipes();
       unsubSmartLogs();
       unsubStockTransactions();
+      unsubAnnouncements();
     };
   }, [isMockFirebase, isAuthenticated, isCloudReady]);
 
@@ -797,7 +827,16 @@ export const BiomateProvider: React.FC<{ children: React.ReactNode }> = ({ child
     return local ? JSON.parse(local) : [];
   });
 
+  const [announcements, setAnnouncements] = useState<Announcement[]>(() => {
+    const local = localStorage.getItem('biomate_internal_board');
+    return local ? JSON.parse(local) : [];
+  });
+
   // Persist values
+  useEffect(() => {
+    localStorage.setItem('biomate_internal_board', JSON.stringify(announcements));
+  }, [announcements]);
+
   useEffect(() => {
     localStorage.setItem('biomate_categories', JSON.stringify(categories));
   }, [categories]);
@@ -1170,6 +1209,35 @@ export const BiomateProvider: React.FC<{ children: React.ReactNode }> = ({ child
     removeDoc('stockTransactions', id);
   };
 
+  const addAnnouncement = (announce: Omit<Announcement, 'id' | 'date'> & { date?: string }) => {
+    const newNote: Announcement = {
+      ...announce,
+      id: `announce-${Date.now()}`,
+      date: announce.date || new Date().toISOString()
+    };
+    setAnnouncements(prev => [newNote, ...prev]);
+    console.log("Board Saved:", newNote);
+    saveDoc('internal_board', newNote.id, newNote);
+  };
+
+  const updateAnnouncement = (id: string, updatedFields: Partial<Omit<Announcement, 'id'>>) => {
+    setAnnouncements(prev => prev.map(note => {
+      if (note.id === id) {
+        const updated = { ...note, ...updatedFields };
+        console.log("Board Saved:", updated);
+        saveDoc('internal_board', id, updated);
+        return updated;
+      }
+      return note;
+    }));
+  };
+
+  const deleteAnnouncement = (id: string) => {
+    console.log("Board Deleted:", id);
+    setAnnouncements(prev => prev.filter(a => a.id !== id));
+    removeDoc('internal_board', id);
+  };
+
   const resetDatabase = async () => {
     setCategories(DEFAULT_CATEGORIES);
     setProducts(DEFAULT_PRODUCTS);
@@ -1179,6 +1247,7 @@ export const BiomateProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setRecipes(DEFAULT_RECIPES);
     setSmartProductionLogs(DEFAULT_SMART_LOGS);
     setStockTransactions([]);
+    setAnnouncements([]);
     setClientFilter('all');
     setShowFixedExpensesToggle(true);
     setShowProductionCostToggle(true);
@@ -1187,7 +1256,7 @@ export const BiomateProvider: React.FC<{ children: React.ReactNode }> = ({ child
     if (!isMockFirebase) {
       try {
         const { getDocs, deleteDoc, doc } = await import('firebase/firestore');
-        const collections = ['categories', 'products', 'sales', 'expenses', 'productionBatches', 'recipes', 'smartProductionLogs', 'stockTransactions'];
+        const collections = ['categories', 'products', 'sales', 'expenses', 'productionBatches', 'recipes', 'smartProductionLogs', 'stockTransactions', 'internal_board'];
         for (const colName of collections) {
           const snap = await getDocs(collection(db, colName));
           for (const d of snap.docs) {
@@ -1256,6 +1325,7 @@ export const BiomateProvider: React.FC<{ children: React.ReactNode }> = ({ child
       recipes,
       smartProductionLogs,
       stockTransactions,
+      announcements,
       addRecipe,
       updateRecipe,
       deleteRecipe,
@@ -1263,6 +1333,9 @@ export const BiomateProvider: React.FC<{ children: React.ReactNode }> = ({ child
       deleteSmartProductionLog,
       addStockTransaction,
       deleteStockTransaction,
+      addAnnouncement,
+      updateAnnouncement,
+      deleteAnnouncement,
       resetDatabase,
       isAuthenticated,
       currentUser,

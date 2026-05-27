@@ -33,6 +33,7 @@ export default function ProductsView() {
   const [imageUrl, setImageUrl] = useState('🧪');
   const [unit, setUnit] = useState('L');
   const [productType, setProductType] = useState<'Produto Final' | 'Insumo' | 'Ambos'>('Produto Final');
+  const [description, setDescription] = useState('');
 
   const [errorMsg, setErrorMsg] = useState('');
 
@@ -90,6 +91,7 @@ export default function ProductsView() {
     setImageUrl('🧪');
     setUnit('L');
     setProductType('Produto Final');
+    setDescription('');
     setErrorMsg('');
     setModalOpen(true);
   };
@@ -106,6 +108,7 @@ export default function ProductsView() {
     setImageUrl(p.imageUrl || '🧪');
     setUnit(p.unit);
     setProductType(p.productType || 'Produto Final');
+    setDescription(p.description || '');
     setErrorMsg('');
     setModalOpen(true);
   };
@@ -131,7 +134,8 @@ export default function ProductsView() {
         minStock: Number(minStock),
         imageUrl,
         unit,
-        productType
+        productType,
+        description
       };
 
       if (editingId) {
@@ -268,6 +272,11 @@ export default function ProductsView() {
                             <td className="p-3 font-bold text-gray-800 dark:text-white">
                               <div className="flex flex-col">
                                 <span>{p.name}</span>
+                                {p.description && (
+                                  <span className="text-[11px] text-gray-500 dark:text-emerald-350 font-normal italic leading-relaxed max-w-[240px] truncate" title={p.description}>
+                                    {p.description}
+                                  </span>
+                                )}
                                 <div className="flex items-center gap-2 mt-1">
                                   <span className="text-[10px] text-gray-400 font-normal">Unid: {p.unit}</span>
                                   <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-full ${
@@ -417,6 +426,17 @@ export default function ProductsView() {
                       </button>
                     ))}
                   </div>
+                </div>
+
+                <div className="col-span-2">
+                  <label className="block text-xs font-bold text-gray-500 dark:text-emerald-400 mb-1">Descrição do Produto</label>
+                  <textarea
+                    rows={2}
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                    placeholder="Digite detalhes do produto, destinação, notas de qualidade..."
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-gray-100 dark:border-emerald-950 bg-[#F8FDFC] dark:bg-emerald-950/20 text-gray-800 dark:text-white focus:outline-none focus:ring-1 focus:ring-[#00C984]"
+                  />
                 </div>
 
                 <div className="col-span-2 sm:col-span-1">
