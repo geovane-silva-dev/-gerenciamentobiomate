@@ -201,19 +201,18 @@ export default function SmartProductionView() {
       return;
     }
 
-    // Validate that no selected product is out of stock (stock <= 0)
+    // Validate that no selected product is out of stock (stock <= 0) - ALLOWED PER USER REQUEST
     const outOfStockNames: string[] = [];
-    recipeIngredients.forEach(ing => {
-      const prod = products.find(p => p.id === ing.productId);
-      if (prod && prod.stock <= 0) {
-        outOfStockNames.push(prod.name);
-      }
-    });
-
-    if (outOfStockNames.length > 0) {
-      setRecipeError(`Não é permitido cadastrar a receita com insumos sem estoque. Insumo(s) zerado(s): ${outOfStockNames.join(', ')}. Reabasteça o lote no estoque primeiro.`);
-      return;
-    }
+    // recipeIngredients.forEach(ing => {
+    //   const prod = products.find(p => p.id === ing.productId);
+    //   if (prod && prod.stock <= 0) {
+    //     outOfStockNames.push(prod.name);
+    //   }
+    // });
+    // if (outOfStockNames.length > 0) {
+    //   setRecipeError(`Não é permitido cadastrar a receita com insumos sem estoque. Insumo(s) zerado(s): ${outOfStockNames.join(', ')}. Reabasteça o lote no estoque primeiro.`);
+    //   return;
+    // }
 
     // Check duplicate ingredients
     const subIds = recipeIngredients.map(i => i.productId);
@@ -1071,7 +1070,7 @@ export default function SmartProductionView() {
                             >
                               <option value="">Selecione o Insumo...</option>
                               {filteredIngProducts.map(p => (
-                                <option key={p.id} value={p.id} disabled={p.stock <= 0}>
+                                <option key={p.id} value={p.id}>
                                   {p.imageUrl} {p.name} {p.stock <= 0 ? '(SEM ESTOQUE)' : `(${p.stock} ${p.unit})`}
                                 </option>
                               ))}
