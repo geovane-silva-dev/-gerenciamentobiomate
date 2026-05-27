@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { Category, Product, Sale, Expense, ProductionBatch, SidebarTab, Recipe, SmartProductionLog } from '../types';
+import { Category, Product, Sale, Expense, ProductionBatch, SidebarTab, Recipe, SmartProductionLog, StockTransaction } from '../types';
 import { db, auth, OperationType, handleFirestoreError, isMockFirebase } from '../firebase';
 import { 
   collection, 
@@ -33,6 +33,7 @@ interface BiomateContextType {
   productionBatches: ProductionBatch[];
   recipes: Recipe[];
   smartProductionLogs: SmartProductionLog[];
+  stockTransactions: StockTransaction[];
 
   // CRUD actions
   addCategory: (cat: Omit<Category, 'id'>) => void;
@@ -52,6 +53,9 @@ interface BiomateContextType {
   registerProductionBatch: (batch: Omit<ProductionBatch, 'id' | 'date'> & { date?: string }) => void;
   deleteProductionBatch: (id: string) => void;
   concludeProductionBatch: (id: string) => void;
+
+  addStockTransaction: (tx: Omit<StockTransaction, 'id' | 'date'> & { date?: string }) => void;
+  deleteStockTransaction: (id: string) => void;
 
   // Smart recipes and actions
   addRecipe: (recipe: Omit<Recipe, 'id'>) => void;
@@ -511,6 +515,10 @@ export const BiomateProvider: React.FC<{ children: React.ReactNode }> = ({ child
                 console.log("Database Empty");
                 console.log("Seed Prevented");
                 console.log("Categories Loaded:", []);
+              } else if (colName === 'stockTransactions') {
+                console.log("History empty");
+                console.log("Seed prevented");
+                console.log("History loaded:", []);
               } else {
                 console.log("Firestore Load:", []);
               }
@@ -521,13 +529,16 @@ export const BiomateProvider: React.FC<{ children: React.ReactNode }> = ({ child
                 fetchedItems.push({ ...d.data(), id: d.id });
               });
               
+              const docs = fetchedItems;
               // Sort to maintain correct descending orders
-              if (colName === 'sales' || colName === 'productionBatches' || colName === 'smartProductionLogs') {
+              if (colName === 'sales' || colName === 'productionBatches' || colName === 'smartProductionLogs' || colName === 'stockTransactions') {
                 fetchedItems.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
               }
               
               if (colName === 'categories') {
                 console.log("Categories Loaded:", fetchedItems);
+              } else if (colName === 'stockTransactions') {
+                console.log("History loaded:", docs);
               } else {
                 console.log("Firestore Load:", fetchedItems);
               }
@@ -546,6 +557,7 @@ export const BiomateProvider: React.FC<{ children: React.ReactNode }> = ({ child
         await syncCollection('productionBatches', setProductionBatches);
         await syncCollection('recipes', setRecipes);
         await syncCollection('smartProductionLogs', setSmartProductionLogs);
+        await syncCollection('stockTransactions', setStockTransactions);
 
         console.log("All collections synced successfully.");
       } catch (error) {
@@ -692,6 +704,29 @@ export const BiomateProvider: React.FC<{ children: React.ReactNode }> = ({ child
       handleFirestoreError(err, OperationType.GET, 'smartProductionLogs');
     });
 
+    const unsubStockTransactions = onSnapshot(collection(db, 'stockTransactions'), (snapshot) => {
+      const list: StockTransaction[] = [];
+      snapshot.forEach(d => {
+        list.push({ ...d.data(), id: d.id } as StockTransaction);
+      });
+      list.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+      console.log("Realtime Snapshot stockTransactions:", snapshot);
+      
+      const docs = list;
+      if (docs.length === 0) {
+        console.log("History empty");
+        console.log("Seed prevented");
+      }
+      console.log("History loaded:", docs);
+      
+      if (docs.length > 0 || isCloudReady) {
+        setStockTransactions(docs);
+      }
+    }, (err) => {
+      console.error("onSnapshot error for stockTransactions:", err);
+      handleFirestoreError(err, OperationType.GET, 'stockTransactions');
+    });
+
     return () => {
       console.log("Cleaning up and unmounting Firestore live listeners...");
       unsubCategories();
@@ -701,6 +736,7 @@ export const BiomateProvider: React.FC<{ children: React.ReactNode }> = ({ child
       unsubBatches();
       unsubRecipes();
       unsubSmartLogs();
+      unsubStockTransactions();
     };
   }, [isMockFirebase, isAuthenticated, isCloudReady]);
 
@@ -756,10 +792,19 @@ export const BiomateProvider: React.FC<{ children: React.ReactNode }> = ({ child
     return local ? JSON.parse(local) : DEFAULT_SMART_LOGS;
   });
 
+  const [stockTransactions, setStockTransactions] = useState<StockTransaction[]>(() => {
+    const local = localStorage.getItem('biomate_stock_transactions');
+    return local ? JSON.parse(local) : [];
+  });
+
   // Persist values
   useEffect(() => {
     localStorage.setItem('biomate_categories', JSON.stringify(categories));
   }, [categories]);
+
+  useEffect(() => {
+    localStorage.setItem('biomate_stock_transactions', JSON.stringify(stockTransactions));
+  }, [stockTransactions]);
 
   useEffect(() => {
     localStorage.setItem('biomate_products', JSON.stringify(products));
@@ -1109,6 +1154,22 @@ export const BiomateProvider: React.FC<{ children: React.ReactNode }> = ({ child
     removeDoc('smartProductionLogs', id);
   };
 
+  const addStockTransaction = (tx: Omit<StockTransaction, 'id' | 'date'> & { date?: string }) => {
+    const newTx: StockTransaction = {
+      ...tx,
+      id: `tx-${Date.now()}`,
+      date: tx.date || new Date().toISOString()
+    };
+    setStockTransactions(prev => [newTx, ...prev]);
+    saveDoc('stockTransactions', newTx.id, newTx);
+  };
+
+  const deleteStockTransaction = (id: string) => {
+    console.log("Deleting history item:", id);
+    setStockTransactions(prev => prev.filter(t => t.id !== id));
+    removeDoc('stockTransactions', id);
+  };
+
   const resetDatabase = async () => {
     setCategories(DEFAULT_CATEGORIES);
     setProducts(DEFAULT_PRODUCTS);
@@ -1117,6 +1178,7 @@ export const BiomateProvider: React.FC<{ children: React.ReactNode }> = ({ child
     setProductionBatches(DEFAULT_PRODUCTION_BATCHES);
     setRecipes(DEFAULT_RECIPES);
     setSmartProductionLogs(DEFAULT_SMART_LOGS);
+    setStockTransactions([]);
     setClientFilter('all');
     setShowFixedExpensesToggle(true);
     setShowProductionCostToggle(true);
@@ -1125,7 +1187,7 @@ export const BiomateProvider: React.FC<{ children: React.ReactNode }> = ({ child
     if (!isMockFirebase) {
       try {
         const { getDocs, deleteDoc, doc } = await import('firebase/firestore');
-        const collections = ['categories', 'products', 'sales', 'expenses', 'productionBatches', 'recipes', 'smartProductionLogs'];
+        const collections = ['categories', 'products', 'sales', 'expenses', 'productionBatches', 'recipes', 'smartProductionLogs', 'stockTransactions'];
         for (const colName of collections) {
           const snap = await getDocs(collection(db, colName));
           for (const d of snap.docs) {
@@ -1193,11 +1255,14 @@ export const BiomateProvider: React.FC<{ children: React.ReactNode }> = ({ child
       concludeProductionBatch,
       recipes,
       smartProductionLogs,
+      stockTransactions,
       addRecipe,
       updateRecipe,
       deleteRecipe,
       executeSmartProduction,
       deleteSmartProductionLog,
+      addStockTransaction,
+      deleteStockTransaction,
       resetDatabase,
       isAuthenticated,
       currentUser,

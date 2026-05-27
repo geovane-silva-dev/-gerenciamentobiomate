@@ -1,6 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { useBiomate } from '../context/BiomateContext';
-import { Product } from '../types';
+import { Product, StockTransaction } from '../types';
 import { formatBRL } from '../utils';
 import {
   Boxes,
@@ -16,16 +16,6 @@ import {
   Trash2
 } from 'lucide-react';
 
-interface StockTransaction {
-  id: string;
-  date: string;
-  productId: string;
-  type: 'entrada' | 'saida';
-  quantity: number;
-  reason: string;
-  operator: string;
-}
-
 export default function InventoryView() {
   const {
     products,
@@ -33,7 +23,10 @@ export default function InventoryView() {
     updateProduct,
     deleteProduct,
     hideValues,
-    confirmAction
+    confirmAction,
+    stockTransactions,
+    addStockTransaction,
+    deleteStockTransaction
   } = useBiomate();
 
   const [searchTerm, setSearchTerm] = useState('');
@@ -49,21 +42,8 @@ export default function InventoryView() {
   const [adjustReason, setAdjustReason] = useState('');
   const [adjustOperator, setAdjustOperator] = useState('Almoxarife Master');
 
-  // Hardcoded or LocalStorage logged inventory transactions
-  const [transactions, setTransactions] = useState<StockTransaction[]>(() => {
-    const local = localStorage.getItem('biomate_stock_transactions');
-    return local ? JSON.parse(local) : [
-      { id: 'tx-1', date: '2026-05-18T08:30:00Z', productId: 'prod-1', type: 'entrada', quantity: 50, reason: 'Recebimento lote de Produção #b3', operator: 'Mário Souza' },
-      { id: 'tx-2', date: '2026-05-18T10:00:00Z', productId: 'prod-4', type: 'saida', quantity: 30, reason: 'Dedução Automática - Venda #sale-5', operator: 'Faturamento ERP' },
-      { id: 'tx-3', date: '2026-05-19T11:00:00Z', productId: 'prod-2', type: 'saida', quantity: 2, reason: 'Amostra Grátis para teste agronômico', operator: 'Ana Martins' },
-      { id: 'tx-4', date: '2026-05-19T15:30:00Z', productId: 'prod-3', type: 'saida', quantity: 12, reason: 'Dedução Automática - Venda #sale-6', operator: 'Faturamento ERP' },
-    ];
-  });
-
-  const saveTransactions = (newTxs: StockTransaction[]) => {
-    setTransactions(newTxs);
-    localStorage.setItem('biomate_stock_transactions', JSON.stringify(newTxs));
-  };
+  // Reference the global context transactions list
+  const transactions = stockTransactions;
 
   // Filter products positions
   const filteredProducts = useMemo(() => {
@@ -155,17 +135,14 @@ export default function InventoryView() {
       });
 
       // Create log audit entry
-      const newTx: StockTransaction = {
-        id: `tx-${Date.now()}`,
+      addStockTransaction({
         date: adjustDate ? new Date(adjustDate + 'T12:00:00').toISOString() : new Date().toISOString(),
         productId: selectedProduct.id,
         type: adjustType,
         quantity: qty,
         reason: adjustReason || 'Ajuste manual de inventário',
         operator: adjustOperator || 'Operador Central'
-      };
-
-      saveTransactions([newTx, ...transactions]);
+      });
       setModalOpen(false);
     };
 
@@ -200,8 +177,7 @@ export default function InventoryView() {
       confirmText: 'Remover Registro',
       isDanger: true,
       onConfirm: () => {
-        const nextTxs = transactions.filter(t => t.id !== id);
-        saveTransactions(nextTxs);
+        deleteStockTransaction(id);
       }
     });
   };

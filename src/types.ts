@@ -77,6 +77,16 @@ export interface UserSession {
   avatarUrl?: string;
 }
 
+export interface StockTransaction {
+  id: string;
+  date: string;
+  productId: string;
+  type: 'entrada' | 'saida';
+  quantity: number;
+  reason: string;
+  operator: string;
+}
+
 export type SidebarTab =
   | 'painel'
   | 'relatorios'
