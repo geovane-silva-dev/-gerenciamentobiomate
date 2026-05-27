@@ -376,54 +376,19 @@ export const BiomateProvider: React.FC<{ children: React.ReactNode }> = ({ child
   const mergeRealtimeList = <T extends { id: string }>(collName: string, snapshotList: T[], currentLocalList: T[]): T[] => {
     const mergedMap = new Map<string, T>();
     
-    // 1. Add everything from the realtime snapshot from Firestore (source of truth)
+    // 1. First, populate from current local state (this holds everything in memory, including any unsynced or newly created items)
+    currentLocalList.forEach(item => {
+      mergedMap.set(item.id, item);
+    });
+    
+    // 2. Overwrite and enrich with latest Firestore snapshot data (the absolute source of truth)
     snapshotList.forEach(item => {
       mergedMap.set(item.id, item);
     });
     
-    // 2. Add any items from current local state that are recently updated/created (within the last 6 seconds)
-    // and aren't in the snapshot list yet.
-    currentLocalList.forEach(item => {
-      const key = `${collName}:${item.id}`;
-      const localHold = recentlyUpdatedIds.current[key];
-      
-      if (!mergedMap.has(item.id)) {
-        if (localHold && (Date.now() - localHold.timestamp < 6000)) {
-          console.log(`[REALTIME MERGE] Preserving local-only transient item for ${collName}/${item.id} (age: ${Date.now() - localHold.timestamp}ms)`);
-          mergedMap.set(item.id, item);
-        } else if (item.id.includes('-') && (
-          item.id.startsWith('tx-') || 
-          item.id.startsWith('sale-') || 
-          item.id.startsWith('prod-b-') || 
-          item.id.startsWith('rec-') || 
-          item.id.startsWith('slog-') || 
-          item.id.startsWith('announce-') || 
-          item.id.startsWith('prod-') || 
-          item.id.startsWith('cat-') || 
-          item.id.startsWith('exp-')
-        )) {
-          // If it has a generated timestamp ID and is very recent by parsing the timestamp
-          const parts = item.id.split('-');
-          const tsStr = parts[parts.length - 1];
-          const ts = Number(tsStr);
-          if (!isNaN(ts) && ts > 0 && (Date.now() - ts < 6000)) {
-            console.log(`[REALTIME MERGE] Auto-preserving recent timestamp-based item for ${collName}/${item.id} (age: ${Date.now() - ts}ms)`);
-            mergedMap.set(item.id, item);
-          }
-        }
-      } else {
-        // If the item lies in both, but local holds are newer
-        if (localHold && (Date.now() - localHold.timestamp < 6000)) {
-          const snapItem = mergedMap.get(item.id)!;
-          mergedMap.set(item.id, {
-            ...snapItem,
-            ...item
-          });
-        }
-      }
-    });
-    
-    return Array.from(mergedMap.values());
+    const result = Array.from(mergedMap.values());
+    console.log(`[REALTIME MERGE] Merged ${collName}. Local count: ${currentLocalList.length}. Firestore snapshot count: ${snapshotList.length}. Merged count: ${result.length}`);
+    return result;
   };
 
   // Firebase Firestore write helpers
@@ -825,8 +790,8 @@ export const BiomateProvider: React.FC<{ children: React.ReactNode }> = ({ child
         list.push({ ...d.data(), id: d.id } as StockTransaction);
       });
       list.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-      console.log("Snapshot Data:", snapshot);
-      console.log("Realtime Snapshot stockTransactions list:", list);
+      console.log("Realtime Snapshot:", snapshot);
+      console.log("Firestore Docs:", list);
       
       const docs = list;
       if (docs.length === 0) {
@@ -1308,17 +1273,17 @@ export const BiomateProvider: React.FC<{ children: React.ReactNode }> = ({ child
   };
 
   const addStockTransaction = (tx: Omit<StockTransaction, 'id' | 'date'> & { date?: string }) => {
+    const randomSuffix = Math.random().toString(36).substring(2, 6);
     const newTx: StockTransaction = {
       ...tx,
-      id: `tx-${Date.now()}`,
+      id: `tx-${Date.now()}-${randomSuffix}`,
       date: tx.date || new Date().toISOString()
     };
     
     setStockTransactions(prev => {
       const merged = [newTx, ...prev];
-      console.log("Previous State:", prev);
-      console.log("New Entry:", newTx);
-      console.log("Merged State:", merged);
+      console.log("All Movements:", merged);
+      console.log("New Movement:", newTx);
       return merged;
     });
 

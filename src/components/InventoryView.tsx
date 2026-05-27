@@ -44,6 +44,8 @@ export default function InventoryView() {
 
   // Reference the global context transactions list
   const transactions = stockTransactions;
+  const ids = transactions.map(tx => tx.id);
+  console.log("Rendered IDs:", ids);
 
   // Filter products positions
   const filteredProducts = useMemo(() => {
