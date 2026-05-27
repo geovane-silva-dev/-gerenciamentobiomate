@@ -128,11 +128,21 @@ export default function InventoryView() {
         ? selectedProduct.stock + qty 
         : Math.max(0, selectedProduct.stock - qty);
 
-      // Update product stock in globally shared context
-      updateProduct(selectedProduct.id, {
+      const stock = selectedProduct.stock;
+      const movement = adjustType === 'entrada' ? `+${qty}` : `-${qty}`;
+      const updatedData = {
         ...selectedProduct,
         stock: nextStock
-      });
+      };
+      const finalStock = nextStock;
+
+      console.log("Stock Before:", stock);
+      console.log("Movement Applied:", movement);
+      console.log("Firestore Update:", updatedData);
+      console.log("Final Stock:", finalStock);
+
+      // Update product stock in globally shared context
+      updateProduct(selectedProduct.id, updatedData);
 
       // Create log audit entry
       addStockTransaction({

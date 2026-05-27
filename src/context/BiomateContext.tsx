@@ -356,8 +356,18 @@ export const BiomateProvider: React.FC<{ children: React.ReactNode }> = ({ child
     return obj;
   };
 
+  // Ref to track local updates and avoid real-time snapshots overwriting them with delayed state
+  const localProductUpdates = React.useRef<Record<string, { stock: number; timestamp: number }>>({});
+
   // Firebase Firestore write helpers
   const saveDoc = async (coll: string, id: string, data: any) => {
+    if (coll === 'products' && data && typeof data.stock === 'number') {
+      localProductUpdates.current[id] = {
+        stock: data.stock,
+        timestamp: Date.now()
+      };
+      console.log(`[OPTIMISTIC HOLD] Registered local hold for product ${id}: stock = ${data.stock}`);
+    }
     if (isMockFirebase) return;
     try {
       const cleaned = cleanData(data);
@@ -630,7 +640,19 @@ export const BiomateProvider: React.FC<{ children: React.ReactNode }> = ({ child
     const unsubProducts = onSnapshot(collection(db, 'products'), (snapshot) => {
       const list: Product[] = [];
       snapshot.forEach(d => {
-        list.push({ ...d.data(), id: d.id } as Product);
+        const data = d.data() as Product;
+        const localHold = localProductUpdates.current[d.id];
+        let finalStock = data.stock;
+        
+        if (localHold && (Date.now() - localHold.timestamp < 3000)) {
+          console.log(`[OPTIMISTIC HOLD] Realtime Snapshot stock ${data.stock} for ${d.id}, holding local stock: ${localHold.stock} (age: ${Date.now() - localHold.timestamp}ms)`);
+          finalStock = localHold.stock;
+        } else if (localHold) {
+          // Cleanup expired hold
+          delete localProductUpdates.current[d.id];
+        }
+        
+        list.push({ ...data, id: d.id, stock: finalStock } as Product);
       });
       console.log("Realtime Snapshot:", snapshot);
       if (list.length > 0 || isCloudReady) {
