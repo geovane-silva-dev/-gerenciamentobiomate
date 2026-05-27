@@ -494,36 +494,26 @@ export const BiomateProvider: React.FC<{ children: React.ReactNode }> = ({ child
       console.log("Starting secure sequential synchronization with Firebase Firestore...");
       setAuthLoading(true);
       try {
-        const { getDocs, query, collection, setDoc, doc } = await import('firebase/firestore');
-
-        // Check if database is completely brand new before we do any seeding
-        const categoriesSnap = await getDocs(query(collection(db, 'categories')));
-        const productsSnap = await getDocs(query(collection(db, 'products')));
-        const isBrandNewDb = categoriesSnap.empty && productsSnap.empty;
+        const { getDocs, query, collection } = await import('firebase/firestore');
 
         // Helper to check and sync each collection individually so we never lose local data nor partial-write syncs
         const syncCollection = async (
           colName: string,
-          localStateItems: any[],
-          defaultItems: any[],
           setStateFn: (items: any[]) => void
         ) => {
           try {
             const snap = await getDocs(query(collection(db, colName)));
-            console.log(`[BOOTSTRAP] Checking '${colName}'... isBrandNewDb=${isBrandNewDb}, snap.empty=${snap.empty}`);
+            console.log(`[BOOTSTRAP] Checking '${colName}'... snap.empty=${snap.empty}`);
             
-            if (isBrandNewDb) {
-              console.log(`[BOOTSTRAP] Firestore is brand new. Uploading default / local state for '${colName}'...`);
-              const itemsToUpload = localStateItems.length > 0 ? localStateItems : defaultItems;
-              for (const item of itemsToUpload) {
-                await setDoc(doc(db, colName, item.id), cleanData(item));
+            if (snap.empty) {
+              console.log(`[BOOTSTRAP] Collection '${colName}' is blank in Firestore. Keeping empty.`);
+              if (colName === 'categories') {
+                console.log("Database Empty");
+                console.log("Seed Prevented");
+                console.log("Categories Loaded:", []);
+              } else {
+                console.log("Firestore Load:", []);
               }
-              console.log("Firestore Load:", itemsToUpload);
-              setStateFn(itemsToUpload);
-            } else if (snap.empty) {
-              // The database contains user records, but this specific collection is empty (e.g., all deleted)
-              console.log(`[BOOTSTRAP] Collection '${colName}' is blank (legitimately cleared). Keeping as empty.`);
-              console.log("Firestore Load:", []);
               setStateFn([]);
             } else {
               const fetchedItems: any[] = [];
@@ -535,7 +525,12 @@ export const BiomateProvider: React.FC<{ children: React.ReactNode }> = ({ child
               if (colName === 'sales' || colName === 'productionBatches' || colName === 'smartProductionLogs') {
                 fetchedItems.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
               }
-              console.log("Firestore Load:", fetchedItems);
+              
+              if (colName === 'categories') {
+                console.log("Categories Loaded:", fetchedItems);
+              } else {
+                console.log("Firestore Load:", fetchedItems);
+              }
               setStateFn(fetchedItems);
             }
           } catch (colError: any) {
@@ -543,14 +538,14 @@ export const BiomateProvider: React.FC<{ children: React.ReactNode }> = ({ child
           }
         };
 
-        // Bootstrap load and sync each schema domain sequence
-        await syncCollection('categories', categories, DEFAULT_CATEGORIES, setCategories);
-        await syncCollection('products', products, DEFAULT_PRODUCTS, setProducts);
-        await syncCollection('sales', sales, DEFAULT_SALES, setSales);
-        await syncCollection('expenses', expenses, DEFAULT_EXPENSES, setExpenses);
-        await syncCollection('productionBatches', productionBatches, DEFAULT_PRODUCTION_BATCHES, setProductionBatches);
-        await syncCollection('recipes', recipes, DEFAULT_RECIPES, setRecipes);
-        await syncCollection('smartProductionLogs', smartProductionLogs, DEFAULT_SMART_LOGS, setSmartProductionLogs);
+        // Bootstrap load and sync each schema domain sequence (NO automatic seeding on start)
+        await syncCollection('categories', setCategories);
+        await syncCollection('products', setProducts);
+        await syncCollection('sales', setSales);
+        await syncCollection('expenses', setExpenses);
+        await syncCollection('productionBatches', setProductionBatches);
+        await syncCollection('recipes', setRecipes);
+        await syncCollection('smartProductionLogs', setSmartProductionLogs);
 
         console.log("All collections synced successfully.");
       } catch (error) {
