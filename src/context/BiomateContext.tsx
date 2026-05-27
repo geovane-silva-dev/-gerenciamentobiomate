@@ -359,8 +359,79 @@ export const BiomateProvider: React.FC<{ children: React.ReactNode }> = ({ child
   // Ref to track local updates and avoid real-time snapshots overwriting them with delayed state
   const localProductUpdates = React.useRef<Record<string, { stock: number; timestamp: number }>>({});
 
+  // Ref to keep track of recently added/edited IDs to prevent them from being discarded by lagging server snapshots
+  const recentlyUpdatedIds = React.useRef<Record<string, { item: any; timestamp: number }>>({});
+
+  // Helper to register a local update/creation
+  const registerLocalUpdate = (collName: string, id: string, item: any) => {
+    const key = `${collName}:${id}`;
+    recentlyUpdatedIds.current[key] = {
+      item,
+      timestamp: Date.now()
+    };
+    console.log(`[REALTIME MERGE] Registered local hold for ${key}`, item);
+  };
+
+  // Helper to merge the incoming Firestore snapshot list with the recently updated local list
+  const mergeRealtimeList = <T extends { id: string }>(collName: string, snapshotList: T[], currentLocalList: T[]): T[] => {
+    const mergedMap = new Map<string, T>();
+    
+    // 1. Add everything from the realtime snapshot from Firestore (source of truth)
+    snapshotList.forEach(item => {
+      mergedMap.set(item.id, item);
+    });
+    
+    // 2. Add any items from current local state that are recently updated/created (within the last 6 seconds)
+    // and aren't in the snapshot list yet.
+    currentLocalList.forEach(item => {
+      const key = `${collName}:${item.id}`;
+      const localHold = recentlyUpdatedIds.current[key];
+      
+      if (!mergedMap.has(item.id)) {
+        if (localHold && (Date.now() - localHold.timestamp < 6000)) {
+          console.log(`[REALTIME MERGE] Preserving local-only transient item for ${collName}/${item.id} (age: ${Date.now() - localHold.timestamp}ms)`);
+          mergedMap.set(item.id, item);
+        } else if (item.id.includes('-') && (
+          item.id.startsWith('tx-') || 
+          item.id.startsWith('sale-') || 
+          item.id.startsWith('prod-b-') || 
+          item.id.startsWith('rec-') || 
+          item.id.startsWith('slog-') || 
+          item.id.startsWith('announce-') || 
+          item.id.startsWith('prod-') || 
+          item.id.startsWith('cat-') || 
+          item.id.startsWith('exp-')
+        )) {
+          // If it has a generated timestamp ID and is very recent by parsing the timestamp
+          const parts = item.id.split('-');
+          const tsStr = parts[parts.length - 1];
+          const ts = Number(tsStr);
+          if (!isNaN(ts) && ts > 0 && (Date.now() - ts < 6000)) {
+            console.log(`[REALTIME MERGE] Auto-preserving recent timestamp-based item for ${collName}/${item.id} (age: ${Date.now() - ts}ms)`);
+            mergedMap.set(item.id, item);
+          }
+        }
+      } else {
+        // If the item lies in both, but local holds are newer
+        if (localHold && (Date.now() - localHold.timestamp < 6000)) {
+          const snapItem = mergedMap.get(item.id)!;
+          mergedMap.set(item.id, {
+            ...snapItem,
+            ...item
+          });
+        }
+      }
+    });
+    
+    return Array.from(mergedMap.values());
+  };
+
   // Firebase Firestore write helpers
   const saveDoc = async (coll: string, id: string, data: any) => {
+    // Hold local records as soon as we save/update them
+    const fullItem = { ...data, id };
+    registerLocalUpdate(coll, id, fullItem);
+
     if (coll === 'products' && data && typeof data.stock === 'number') {
       localProductUpdates.current[id] = {
         stock: data.stock,
@@ -628,9 +699,9 @@ export const BiomateProvider: React.FC<{ children: React.ReactNode }> = ({ child
       snapshot.forEach(d => {
         list.push({ ...d.data(), id: d.id } as Category);
       });
-      console.log("Realtime Snapshot:", snapshot);
+      console.log("Realtime Snapshot categories:", snapshot);
       if (list.length > 0 || isCloudReady) {
-        setCategories(list);
+        setCategories(prev => mergeRealtimeList('categories', list, prev));
       }
     }, (err) => {
       console.error("onSnapshot error for categories:", err);
@@ -654,9 +725,9 @@ export const BiomateProvider: React.FC<{ children: React.ReactNode }> = ({ child
         
         list.push({ ...data, id: d.id, stock: finalStock } as Product);
       });
-      console.log("Realtime Snapshot:", snapshot);
+      console.log("Realtime Snapshot products:", snapshot);
       if (list.length > 0 || isCloudReady) {
-        setProducts(list);
+        setProducts(prev => mergeRealtimeList('products', list, prev));
       }
     }, (err) => {
       console.error("onSnapshot error for products:", err);
@@ -669,9 +740,13 @@ export const BiomateProvider: React.FC<{ children: React.ReactNode }> = ({ child
         list.push({ ...d.data(), id: d.id } as Sale);
       });
       list.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-      console.log("Realtime Snapshot:", snapshot);
+      console.log("Realtime Snapshot sales:", snapshot);
       if (list.length > 0 || isCloudReady) {
-        setSales(list);
+        setSales(prev => {
+          const merged = mergeRealtimeList('sales', list, prev);
+          merged.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+          return merged;
+        });
       }
     }, (err) => {
       console.error("onSnapshot error for sales:", err);
@@ -683,9 +758,9 @@ export const BiomateProvider: React.FC<{ children: React.ReactNode }> = ({ child
       snapshot.forEach(d => {
         list.push({ ...d.data(), id: d.id } as Expense);
       });
-      console.log("Realtime Snapshot:", snapshot);
+      console.log("Realtime Snapshot expenses:", snapshot);
       if (list.length > 0 || isCloudReady) {
-        setExpenses(list);
+        setExpenses(prev => mergeRealtimeList('expenses', list, prev));
       }
     }, (err) => {
       console.error("onSnapshot error for expenses:", err);
@@ -698,9 +773,13 @@ export const BiomateProvider: React.FC<{ children: React.ReactNode }> = ({ child
         list.push({ ...d.data(), id: d.id } as ProductionBatch);
       });
       list.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-      console.log("Realtime Snapshot:", snapshot);
+      console.log("Realtime Snapshot productionBatches:", snapshot);
       if (list.length > 0 || isCloudReady) {
-        setProductionBatches(list);
+        setProductionBatches(prev => {
+          const merged = mergeRealtimeList('productionBatches', list, prev);
+          merged.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+          return merged;
+        });
       }
     }, (err) => {
       console.error("onSnapshot error for productionBatches:", err);
@@ -712,9 +791,9 @@ export const BiomateProvider: React.FC<{ children: React.ReactNode }> = ({ child
       snapshot.forEach(d => {
         list.push({ ...d.data(), id: d.id } as Recipe);
       });
-      console.log("Realtime Snapshot:", snapshot);
+      console.log("Realtime Snapshot recipes:", snapshot);
       if (list.length > 0 || isCloudReady) {
-        setRecipes(list);
+        setRecipes(prev => mergeRealtimeList('recipes', list, prev));
       }
     }, (err) => {
       console.error("onSnapshot error for recipes:", err);
@@ -727,9 +806,13 @@ export const BiomateProvider: React.FC<{ children: React.ReactNode }> = ({ child
         list.push({ ...d.data(), id: d.id } as SmartProductionLog);
       });
       list.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-      console.log("Realtime Snapshot:", snapshot);
+      console.log("Realtime Snapshot smartProductionLogs:", snapshot);
       if (list.length > 0 || isCloudReady) {
-        setSmartProductionLogs(list);
+        setSmartProductionLogs(prev => {
+          const merged = mergeRealtimeList('smartProductionLogs', list, prev);
+          merged.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+          return merged;
+        });
       }
     }, (err) => {
       console.error("onSnapshot error for smartProductionLogs:", err);
@@ -742,7 +825,8 @@ export const BiomateProvider: React.FC<{ children: React.ReactNode }> = ({ child
         list.push({ ...d.data(), id: d.id } as StockTransaction);
       });
       list.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-      console.log("Realtime Snapshot stockTransactions:", snapshot);
+      console.log("Snapshot Data:", snapshot);
+      console.log("Realtime Snapshot stockTransactions list:", list);
       
       const docs = list;
       if (docs.length === 0) {
@@ -752,7 +836,11 @@ export const BiomateProvider: React.FC<{ children: React.ReactNode }> = ({ child
       console.log("History loaded:", docs);
       
       if (docs.length > 0 || isCloudReady) {
-        setStockTransactions(docs);
+        setStockTransactions(prev => {
+          const merged = mergeRealtimeList('stockTransactions', docs, prev);
+          merged.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+          return merged;
+        });
       }
     }, (err) => {
       console.error("onSnapshot error for stockTransactions:", err);
@@ -771,7 +859,11 @@ export const BiomateProvider: React.FC<{ children: React.ReactNode }> = ({ child
       console.log("Board Loaded:", docs);
       
       if (docs.length > 0 || isCloudReady) {
-        setAnnouncements(docs);
+        setAnnouncements(prev => {
+          const merged = mergeRealtimeList('internal_board', docs, prev);
+          merged.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+          return merged;
+        });
       }
     }, (err) => {
       console.error("onSnapshot error for internal_board:", err);
@@ -1221,7 +1313,16 @@ export const BiomateProvider: React.FC<{ children: React.ReactNode }> = ({ child
       id: `tx-${Date.now()}`,
       date: tx.date || new Date().toISOString()
     };
-    setStockTransactions(prev => [newTx, ...prev]);
+    
+    setStockTransactions(prev => {
+      const merged = [newTx, ...prev];
+      console.log("Previous State:", prev);
+      console.log("New Entry:", newTx);
+      console.log("Merged State:", merged);
+      return merged;
+    });
+
+    console.log("Firestore Save:", newTx);
     saveDoc('stockTransactions', newTx.id, newTx);
   };
 
