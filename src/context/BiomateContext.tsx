@@ -43,13 +43,13 @@ interface BiomateContextType {
   updateProduct: (id: string, prod: Omit<Product, 'id'>) => void;
   deleteProduct: (id: string) => void;
 
-  registerSale: (sale: Omit<Sale, 'id' | 'date' | 'totalAmount' | 'productionCost' | 'profit'>) => boolean;
+  registerSale: (sale: Omit<Sale, 'id' | 'date' | 'totalAmount' | 'productionCost' | 'profit'> & { date?: string }) => boolean;
   deleteSale: (id: string) => void;
 
   registerExpense: (exp: Omit<Expense, 'id'>) => void;
   deleteExpense: (id: string) => void;
 
-  registerProductionBatch: (batch: Omit<ProductionBatch, 'id' | 'date'>) => void;
+  registerProductionBatch: (batch: Omit<ProductionBatch, 'id' | 'date'> & { date?: string }) => void;
   deleteProductionBatch: (id: string) => void;
   concludeProductionBatch: (id: string) => void;
 
@@ -852,7 +852,7 @@ export const BiomateProvider: React.FC<{ children: React.ReactNode }> = ({ child
     removeDoc('products', id);
   };
 
-  const registerSale = (saleData: Omit<Sale, 'id' | 'date' | 'totalAmount' | 'productionCost' | 'profit'>) => {
+  const registerSale = (saleData: Omit<Sale, 'id' | 'date' | 'totalAmount' | 'productionCost' | 'profit'> & { date?: string }) => {
     const targetProduct = products.find(p => p.id === saleData.productId);
     if (!targetProduct) return false;
 
@@ -864,7 +864,7 @@ export const BiomateProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
     const newSale: Sale = {
       id: `sale-${Date.now()}`,
-      date: new Date().toISOString(),
+      date: saleData.date || new Date().toISOString(),
       productId: saleData.productId,
       quantity,
       unitPrice: Number(saleData.unitPrice),
@@ -917,11 +917,11 @@ export const BiomateProvider: React.FC<{ children: React.ReactNode }> = ({ child
     removeDoc('expenses', id);
   };
 
-  const registerProductionBatch = (batch: Omit<ProductionBatch, 'id' | 'date'>) => {
+  const registerProductionBatch = (batch: Omit<ProductionBatch, 'id' | 'date'> & { date?: string }) => {
     const newBatch: ProductionBatch = {
       ...batch,
       id: `prod-b-${Date.now()}`,
-      date: new Date().toISOString()
+      date: batch.date || new Date().toISOString()
     };
 
     // Add produced quantity to inventory only if the batch is concluded

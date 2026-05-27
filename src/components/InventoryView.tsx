@@ -45,6 +45,7 @@ export default function InventoryView() {
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [adjustType, setAdjustType] = useState<'entrada' | 'saida'>('entrada');
   const [adjustQty, setAdjustQty] = useState('');
+  const [adjustDate, setAdjustDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [adjustReason, setAdjustReason] = useState('');
   const [adjustOperator, setAdjustOperator] = useState('Almoxarife Master');
 
@@ -127,6 +128,7 @@ export default function InventoryView() {
     setSelectedProduct(p);
     setAdjustType(type);
     setAdjustQty('');
+    setAdjustDate(new Date().toISOString().split('T')[0]);
     setAdjustReason(type === 'entrada' ? 'Recebimento de Lote' : 'Remessa ou Descarte Técnico');
     setModalOpen(true);
   };
@@ -155,7 +157,7 @@ export default function InventoryView() {
       // Create log audit entry
       const newTx: StockTransaction = {
         id: `tx-${Date.now()}`,
-        date: new Date().toISOString(),
+        date: adjustDate ? new Date(adjustDate + 'T12:00:00').toISOString() : new Date().toISOString(),
         productId: selectedProduct.id,
         type: adjustType,
         quantity: qty,
@@ -493,17 +495,30 @@ export default function InventoryView() {
             </div>
 
             <form onSubmit={handleSaveAdjust} className="space-y-4 text-sm">
-              <div>
-                <label className="block text-xs font-bold text-gray-500 dark:text-emerald-400 mb-1">Dose / Quantidade em ({selectedProduct.unit}) *</label>
-                <input
-                  type="number"
-                  required
-                  min="1"
-                  value={adjustQty}
-                  onChange={(e) => setAdjustQty(e.target.value)}
-                  placeholder="Selecione a quantidade de ajuste..."
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-gray-100 dark:border-emerald-950 bg-[#F8FDFC] dark:bg-emerald-950/20 text-gray-800 dark:text-white font-mono focus:outline-none focus:ring-1 focus:ring-[#00C984]"
-                />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-gray-500 dark:text-emerald-400 mb-1">Dose / Quantidade em ({selectedProduct.unit}) *</label>
+                  <input
+                    type="number"
+                    required
+                    min="1"
+                    value={adjustQty}
+                    onChange={(e) => setAdjustQty(e.target.value)}
+                    placeholder="Selecione a quantidade de ajuste..."
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-gray-100 dark:border-emerald-950 bg-[#F8FDFC] dark:bg-[#122c24] text-gray-800 dark:text-white font-mono focus:outline-none focus:ring-1 focus:ring-[#00C984]"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-gray-500 dark:text-emerald-400 mb-1">Data da Operação *</label>
+                  <input
+                    type="date"
+                    required
+                    value={adjustDate}
+                    onChange={(e) => setAdjustDate(e.target.value)}
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-gray-100 dark:border-emerald-950 bg-[#F8FDFC] dark:bg-[#122c24] text-gray-800 dark:text-white focus:outline-none focus:ring-1 focus:ring-[#00C984]"
+                  />
+                </div>
               </div>
 
               <div>

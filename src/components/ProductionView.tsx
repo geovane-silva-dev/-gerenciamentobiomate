@@ -40,6 +40,7 @@ export default function ProductionView() {
   const [rawMaterialCost, setRawMaterialCost] = useState('1000.00');
   const [responsible, setResponsible] = useState('Rosana');
   const [status, setStatus] = useState<'Concluído' | 'Em Andamento'>('Concluído');
+  const [productionDate, setProductionDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [errorMsg, setErrorMsg] = useState('');
 
   // Built-in operators array
@@ -95,6 +96,7 @@ export default function ProductionView() {
     setRawMaterialCost(initialCost);
     setResponsible('Rosana');
     setStatus('Concluído');
+    setProductionDate(new Date().toISOString().split('T')[0]);
     setErrorMsg('');
     setModalOpen(true);
   };
@@ -120,7 +122,8 @@ export default function ProductionView() {
       quantityProduced: qty,
       rawMaterialCost: cost,
       responsible,
-      status
+      status,
+      date: productionDate ? new Date(productionDate + 'T12:00:00').toISOString() : new Date().toISOString()
     });
 
     setModalOpen(false);
@@ -407,6 +410,17 @@ export default function ProductionView() {
                     <option value="Concluído">Concluído (Alimenta Estoque)</option>
                     <option value="Em Andamento">Em Andamento</option>
                   </select>
+                </div>
+
+                <div className="col-span-2">
+                  <label className="block text-xs font-bold text-gray-500 dark:text-emerald-400 mb-1">Data da Manufatura / Entrega *</label>
+                  <input
+                    type="date"
+                    required
+                    value={productionDate}
+                    onChange={(e) => setProductionDate(e.target.value)}
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-gray-100 dark:border-emerald-950 bg-[#F8FDFC] dark:bg-[#122c24] text-gray-800 dark:text-white focus:outline-none focus:ring-1 focus:ring-[#00C984]"
+                  />
                 </div>
               </div>
 

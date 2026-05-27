@@ -48,6 +48,7 @@ export default function SalesView() {
   const [quantity, setQuantity] = useState('10');
   const [unitPrice, setUnitPrice] = useState('');
   const [customerName, setCustomerName] = useState('');
+  const [saleDate, setSaleDate] = useState(() => new Date().toISOString().split('T')[0]);
   const [errorMsg, setErrorMsg] = useState('');
 
   // Auto-fill price when product changes
@@ -141,6 +142,7 @@ export default function SalesView() {
     setUnitPrice(firstProd.price.toString());
     setQuantity('5');
     setCustomerName('');
+    setSaleDate(new Date().toISOString().split('T')[0]);
     setErrorMsg('');
     setModalOpen(true);
   };
@@ -166,7 +168,8 @@ export default function SalesView() {
         productId,
         quantity: qty,
         unitPrice: Number(unitPrice),
-        customerName
+        customerName,
+        date: saleDate ? new Date(saleDate + 'T12:00:00').toISOString() : new Date().toISOString()
       });
 
       if (success) {
@@ -461,16 +464,29 @@ export default function SalesView() {
             )}
 
             <form onSubmit={handleSubmit} className="space-y-4 text-sm">
-              <div>
-                <label className="block text-xs font-bold text-gray-500 dark:text-emerald-400 mb-1">Nome do Comprador / Agropecuária *</label>
-                <input
-                  type="text"
-                  required
-                  value={customerName}
-                  onChange={(e) => setCustomerName(e.target.value)}
-                  placeholder="ex: Fazenda Progresso S/A"
-                  className="w-full px-3.5 py-2.5 rounded-xl border border-gray-100 dark:border-emerald-950 bg-[#F8FDFC] dark:bg-emerald-950/20 text-gray-800 dark:text-white focus:outline-none focus:ring-1 focus:ring-[#00C984]"
-                />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold text-gray-500 dark:text-emerald-400 mb-1">Nome do Comprador / Agropecuária *</label>
+                  <input
+                    type="text"
+                    required
+                    value={customerName}
+                    onChange={(e) => setCustomerName(e.target.value)}
+                    placeholder="ex: Fazenda Progresso S/A"
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-gray-100 dark:border-emerald-950 bg-[#F8FDFC] dark:bg-[#122c24] text-gray-800 dark:text-white focus:outline-none focus:ring-1 focus:ring-[#00C984]"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-gray-500 dark:text-emerald-400 mb-1">Data da Venda / Saída *</label>
+                  <input
+                    type="date"
+                    required
+                    value={saleDate}
+                    onChange={(e) => setSaleDate(e.target.value)}
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-gray-100 dark:border-emerald-950 bg-[#F8FDFC] dark:bg-[#122c24] text-gray-800 dark:text-white focus:outline-none focus:ring-1 focus:ring-[#00C984]"
+                  />
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
