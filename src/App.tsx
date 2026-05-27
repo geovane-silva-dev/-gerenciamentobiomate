@@ -1,5 +1,7 @@
 import React from 'react';
 import { BiomateProvider, useBiomate } from './context/BiomateContext';
+import { AuthProvider, useAuth } from './context/AuthContext';
+import LoginPage from './components/LoginPage';
 import Sidebar from './components/Sidebar';
 import DashboardView from './components/DashboardView';
 import ReportsView from './components/ReportsView';
@@ -15,6 +17,22 @@ import { AlertTriangle, Loader2 } from 'lucide-react';
 
 function AppContent() {
   const { activeTab, darkMode, confirmConfig, closeConfirm, isCloudReady } = useBiomate();
+  const { isAuthenticated, isLoading } = useAuth();
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-[#04241b] flex flex-col items-center justify-center text-white select-none">
+        <div className="flex flex-col items-center space-y-4">
+          <Loader2 className="w-10 h-10 text-[#00C984] animate-spin" />
+          <span className="text-xs text-emerald-200/60 uppercase tracking-widest font-semibold">Verificando Credenciais...</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return <LoginPage />;
+  }
 
   const renderActiveView = () => {
     switch (activeTab) {
@@ -152,8 +170,10 @@ function AppContent() {
 
 export default function App() {
   return (
-    <BiomateProvider>
-      <AppContent />
-    </BiomateProvider>
+    <AuthProvider>
+      <BiomateProvider>
+        <AppContent />
+      </BiomateProvider>
+    </AuthProvider>
   );
 }

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useBiomate } from '../context/BiomateContext';
+import { useAuth } from '../context/AuthContext';
 import { SidebarTab } from '../types';
 import {
   LayoutDashboard,
@@ -43,6 +44,8 @@ export default function Sidebar() {
     authLoading,
     authError
   } = useBiomate();
+
+  const { logout: logoutAuth } = useAuth();
 
   const [mobileOpen, setMobileOpen] = useState(false);
   const isInIframe = typeof window !== 'undefined' && window.self !== window.top;
@@ -152,6 +155,25 @@ export default function Sidebar() {
         >
           <Trash2 className="w-4 h-4" />
           <span>Redefinir Dados</span>
+        </button>
+
+        {/* Sair do Sistema (Logout) */}
+        <button
+          onClick={() => {
+            confirmAction({
+              title: 'Sair do Sistema',
+              message: 'Deseja realmente encerrar sua sessão administrativa no BIOMATE?',
+              confirmText: 'Sair do Sistema',
+              onConfirm: () => {
+                logoutAuth();
+              }
+            });
+          }}
+          className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-xs text-rose-400/80 hover:bg-white/5 hover:text-rose-400 transition-all uppercase"
+          id="btn-logout-auth"
+        >
+          <LogOut className="w-4 h-4" />
+          <span>Sair do Sistema</span>
         </button>
 
         {/* Cloud Status / Authentication Section */}
