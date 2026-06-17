@@ -1027,6 +1027,11 @@ export const BiomateProvider: React.FC<{ children: React.ReactNode }> = ({ child
     // Optimistic sale append
     setSales(prev => [finalSale, ...prev]);
 
+    if (isMockFirebase) {
+      console.log("Mock Sale Registered:", finalSale);
+      return true;
+    }
+
     // Perform atomic transaction on the database using pre-generated IDs
     registerSaleTransaction(saleData, realSaleId, realStockTxId).then(savedSale => {
       console.log("Firestore Sale Registered atomically with pre-generated matching ID:", savedSale);
@@ -1059,6 +1064,11 @@ export const BiomateProvider: React.FC<{ children: React.ReactNode }> = ({ child
 
     // Optimistic deletion of sale
     setSales(prev => prev.filter(s => s.id !== id));
+
+    if (isMockFirebase) {
+      console.log("Mock Sale Deleted:", id);
+      return;
+    }
 
     // Execute transactional deletion
     deleteSaleTransaction(id).catch(err => {
@@ -1240,6 +1250,11 @@ export const BiomateProvider: React.FC<{ children: React.ReactNode }> = ({ child
     // Optimistically append the log
     setSmartProductionLogs(prev => [finalLog, ...prev]);
 
+    if (isMockFirebase) {
+      console.log("Mock Smart Production Registered:", finalLog);
+      return { success: true };
+    }
+
     // Execute the database transaction using pre-generated ID
     executeSmartProductionTransaction(
       recipe,
@@ -1290,6 +1305,11 @@ export const BiomateProvider: React.FC<{ children: React.ReactNode }> = ({ child
     // Optimistically delete log from local state
     setSmartProductionLogs(prev => prev.filter(l => l.id !== id));
 
+    if (isMockFirebase) {
+      console.log("Mock Smart Production Log Deleted:", id);
+      return;
+    }
+
     // Execute transaction database operation
     deleteSmartProductionLogTransaction(logToDelete, recipes).catch(err => {
       console.log("Failed to revert smart production transactionally:", err);
@@ -1339,6 +1359,11 @@ export const BiomateProvider: React.FC<{ children: React.ReactNode }> = ({ child
       }
       return p;
     }));
+
+    if (isMockFirebase) {
+      console.log("Mock Stock Movement Added:", finalTx);
+      return;
+    }
 
     try {
       const savedTx = await addStockMovementTransaction(
