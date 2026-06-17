@@ -673,7 +673,7 @@ export const BiomateProvider: React.FC<{ children: React.ReactNode }> = ({ child
       });
       console.log("Realtime Snapshot categories:", snapshot);
       if (list.length > 0 || isCloudReady) {
-        setCategories(prev => mergeRealtimeList('categories', list, prev));
+        setCategories(list);
       }
     }, (err) => {
       console.error("onSnapshot error for categories:", err);
@@ -699,7 +699,7 @@ export const BiomateProvider: React.FC<{ children: React.ReactNode }> = ({ child
       });
       console.log("Realtime Snapshot products:", snapshot);
       if (list.length > 0 || isCloudReady) {
-        setProducts(prev => mergeRealtimeList('products', list, prev));
+        setProducts(list);
       }
     }, (err) => {
       console.error("onSnapshot error for products:", err);
@@ -714,11 +714,7 @@ export const BiomateProvider: React.FC<{ children: React.ReactNode }> = ({ child
       list.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
       console.log("Realtime Snapshot sales:", snapshot);
       if (list.length > 0 || isCloudReady) {
-        setSales(prev => {
-          const merged = mergeRealtimeList('sales', list, prev);
-          merged.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-          return merged;
-        });
+        setSales(list);
       }
     }, (err) => {
       console.error("onSnapshot error for sales:", err);
@@ -732,7 +728,7 @@ export const BiomateProvider: React.FC<{ children: React.ReactNode }> = ({ child
       });
       console.log("Realtime Snapshot expenses:", snapshot);
       if (list.length > 0 || isCloudReady) {
-        setExpenses(prev => mergeRealtimeList('expenses', list, prev));
+        setExpenses(list);
       }
     }, (err) => {
       console.error("onSnapshot error for expenses:", err);
@@ -747,11 +743,7 @@ export const BiomateProvider: React.FC<{ children: React.ReactNode }> = ({ child
       list.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
       console.log("Realtime Snapshot productionBatches:", snapshot);
       if (list.length > 0 || isCloudReady) {
-        setProductionBatches(prev => {
-          const merged = mergeRealtimeList('productionBatches', list, prev);
-          merged.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-          return merged;
-        });
+        setProductionBatches(list);
       }
     }, (err) => {
       console.error("onSnapshot error for productionBatches:", err);
@@ -765,7 +757,7 @@ export const BiomateProvider: React.FC<{ children: React.ReactNode }> = ({ child
       });
       console.log("Realtime Snapshot recipes:", snapshot);
       if (list.length > 0 || isCloudReady) {
-        setRecipes(prev => mergeRealtimeList('recipes', list, prev));
+        setRecipes(list);
       }
     }, (err) => {
       console.error("onSnapshot error for recipes:", err);
@@ -780,11 +772,7 @@ export const BiomateProvider: React.FC<{ children: React.ReactNode }> = ({ child
       list.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
       console.log("Realtime Snapshot smartProductionLogs:", snapshot);
       if (list.length > 0 || isCloudReady) {
-        setSmartProductionLogs(prev => {
-          const merged = mergeRealtimeList('smartProductionLogs', list, prev);
-          merged.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-          return merged;
-        });
+        setSmartProductionLogs(list);
       }
     }, (err) => {
       console.error("onSnapshot error for smartProductionLogs:", err);
@@ -798,29 +786,10 @@ export const BiomateProvider: React.FC<{ children: React.ReactNode }> = ({ child
       });
       list.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
       
-      const docs = list;
-      console.log("Realtime Snapshot:", docs);
-      const ids = docs.map(tx => tx.id);
-      console.log("Firestore IDs:", ids);
+      console.log("Realtime Snapshot stockTransactions loaded:", list);
       
-      if (docs.length === 0) {
-        console.log("History empty");
-        console.log("Seed prevented");
-      }
-      console.log("History loaded:", docs);
-      
-      if (docs.length > 0 || isCloudReady) {
-        setStockTransactions(prev => {
-          const tempItems = prev.filter(t => t.id.startsWith('tx-temp-'));
-          const merged = [...tempItems];
-          docs.forEach(docItem => {
-            if (!merged.some(m => m.id === docItem.id)) {
-              merged.push(docItem);
-            }
-          });
-          merged.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-          return merged;
-        });
+      if (list.length > 0 || isCloudReady) {
+        setStockTransactions(list);
       }
     }, (err) => {
       console.error("onSnapshot error for stockTransactions:", err);
@@ -834,16 +803,8 @@ export const BiomateProvider: React.FC<{ children: React.ReactNode }> = ({ child
       });
       list.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
       console.log("Realtime Board:", snapshot);
-      
-      const docs = list;
-      console.log("Board Loaded:", docs);
-      
-      if (docs.length > 0 || isCloudReady) {
-        setAnnouncements(prev => {
-          const merged = mergeRealtimeList('internal_board', docs, prev);
-          merged.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-          return merged;
-        });
+      if (list.length > 0 || isCloudReady) {
+        setAnnouncements(list);
       }
     }, (err) => {
       console.error("onSnapshot error for internal_board:", err);
@@ -1039,9 +1000,12 @@ export const BiomateProvider: React.FC<{ children: React.ReactNode }> = ({ child
     const totalAmount = Number(saleData.unitPrice) * quantity;
     const profit = totalAmount - cost;
 
-    const tempSaleId = `sale-temp-${Date.now()}`;
-    const tempSale: Sale = {
-      id: tempSaleId,
+    // Pre-generate client-side real Firestore IDs
+    const realSaleId = doc(collection(db, 'sales')).id;
+    const realStockTxId = doc(collection(db, 'stockTransactions')).id;
+
+    const finalSale: Sale = {
+      id: realSaleId,
       date: saleData.date || new Date().toISOString(),
       productId: saleData.productId,
       quantity,
@@ -1061,21 +1025,15 @@ export const BiomateProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }));
 
     // Optimistic sale append
-    setSales(prev => [tempSale, ...prev]);
+    setSales(prev => [finalSale, ...prev]);
 
-    // Perform atomic transaction on the database
-    registerSaleTransaction(saleData).then(savedSale => {
-      setSales(prev => {
-        const alreadyHasReal = prev.some(s => s.id === savedSale.id);
-        if (alreadyHasReal) {
-          return prev.filter(s => s.id !== tempSaleId);
-        }
-        return prev.map(s => s.id === tempSaleId ? savedSale : s);
-      });
+    // Perform atomic transaction on the database using pre-generated IDs
+    registerSaleTransaction(saleData, realSaleId, realStockTxId).then(savedSale => {
+      console.log("Firestore Sale Registered atomically with pre-generated matching ID:", savedSale);
     }).catch(err => {
       console.error("Failed to complete sale transactionally:", err);
       // Revert optimistic updates on error
-      setSales(prev => prev.filter(s => s.id !== tempSaleId));
+      setSales(prev => prev.filter(s => s.id !== realSaleId));
       setProducts(prev => prev.map(p => {
         if (p.id === saleData.productId) {
           return { ...p, stock: p.stock + quantity };
@@ -1247,9 +1205,11 @@ export const BiomateProvider: React.FC<{ children: React.ReactNode }> = ({ child
     const totalIngredientsCost = ingredientCostBreakdown.reduce((sum, item) => sum + (item.cost * item.totalNeeded), 0);
     const unitCostPrice = quantityToProduce > 0 ? (totalIngredientsCost / quantityToProduce) : 0;
 
-    const tempLogId = `slog-temp-${Date.now()}`;
-    const tempLog: SmartProductionLog = {
-      id: tempLogId,
+    // Pre-generate client-side real Firestore ID
+    const realLogId = doc(collection(db, 'smartProductionLogs')).id;
+
+    const finalLog: SmartProductionLog = {
+      id: realLogId,
       recipeId: recipe.id,
       productId: recipe.productId,
       quantityProduced: quantityToProduce,
@@ -1278,26 +1238,21 @@ export const BiomateProvider: React.FC<{ children: React.ReactNode }> = ({ child
     }));
 
     // Optimistically append the log
-    setSmartProductionLogs(prev => [tempLog, ...prev]);
+    setSmartProductionLogs(prev => [finalLog, ...prev]);
 
-    // Execute the database transaction
+    // Execute the database transaction using pre-generated ID
     executeSmartProductionTransaction(
       recipe,
       quantityToProduce,
       responsible,
-      ingredientCostBreakdown
+      ingredientCostBreakdown,
+      realLogId
     ).then(savedLog => {
-      setSmartProductionLogs(prev => {
-        const alreadyHasReal = prev.some(l => l.id === savedLog.id);
-        if (alreadyHasReal) {
-          return prev.filter(l => l.id !== tempLogId);
-        }
-        return prev.map(l => l.id === tempLogId ? savedLog : l);
-      });
+      console.log("Firestore Smart Production Registered atomically with matching pre-generated ID:", savedLog);
     }).catch(err => {
       console.error("Failed to complete smart production transactionally:", err);
       // Revert optimistic updates
-      setSmartProductionLogs(prev => prev.filter(l => l.id !== tempLogId));
+      setSmartProductionLogs(prev => prev.filter(l => l.id !== realLogId));
       setProducts(prev => prev.map(p => {
         if (p.id === recipe.productId) {
           return { ...p, stock: Math.max(0, p.stock - quantityToProduce) };
@@ -1354,15 +1309,16 @@ export const BiomateProvider: React.FC<{ children: React.ReactNode }> = ({ child
   };
 
   const addStockTransaction = async (tx: Omit<StockTransaction, 'id' | 'date'> & { date?: string }) => {
-    const tempId = `tx-temp-${Date.now()}`;
-    const tempTx: StockTransaction = {
+    // Generate a valid real Firestore document ID synchronously on the client
+    const realId = doc(collection(db, 'stockTransactions')).id;
+    const finalTx: StockTransaction = {
       ...tx,
-      id: tempId,
+      id: realId,
       date: tx.date || new Date().toISOString()
     };
     
-    // Optimistically increment local list to keep UI instantly fluid
-    setStockTransactions(prev => [tempTx, ...prev]);
+    // Optimistically update stockTransactions with the matching real ID
+    setStockTransactions(prev => [finalTx, ...prev]);
 
     // Optimistically update product stock list state & local hold cache to avoid latency gaps
     const qty = Number(tx.quantity);
@@ -1391,24 +1347,15 @@ export const BiomateProvider: React.FC<{ children: React.ReactNode }> = ({ child
         tx.quantity,
         tx.reason,
         tx.operator,
-        tx.date
+        tx.date,
+        realId
       );
       
-      // Update with exact document ID from transaction response and log exact events
-      console.log("Firestore Movement Added:", savedTx);
-      console.log("Movement Persisted Successfully");
-
-      setStockTransactions(prev => {
-        const alreadyHasReal = prev.some(t => t.id === savedTx.id);
-        if (alreadyHasReal) {
-          return prev.filter(t => t.id !== tempId);
-        }
-        return prev.map(t => t.id === tempId ? savedTx : t);
-      });
+      console.log("Firestore Movement Added atomically with pre-generated matching ID:", savedTx);
     } catch (err) {
       console.error("Failed to append stock transaction transactionally:", err);
       // Revert optimistic log
-      setStockTransactions(prev => prev.filter(t => t.id !== tempId));
+      setStockTransactions(prev => prev.filter(t => t.id !== realId));
       
       // Revert optimistic product stock
       setProducts(prev => prev.map(p => {

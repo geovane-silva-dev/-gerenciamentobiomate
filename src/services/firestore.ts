@@ -25,11 +25,12 @@ export async function addStockMovementTransaction(
   quantity: number,
   reason: string,
   operator: string,
-  dateString?: string
+  dateString?: string,
+  customTxId?: string
 ): Promise<StockTransaction> {
   const productRef = doc(db, 'products', productId);
   const transactionsColl = collection(db, 'stockTransactions');
-  const txRef = doc(transactionsColl); // Pre-generate autoId for the transaction movement
+  const txRef = customTxId ? doc(db, 'stockTransactions', customTxId) : doc(transactionsColl);
 
   let createdTx: StockTransaction | null = null;
 
@@ -77,14 +78,13 @@ export async function addStockMovementTransaction(
  * Register a sale transaction. Deducts product stock and records the sale atomically.
  */
 export async function registerSaleTransaction(
-  saleData: Omit<Sale, 'id' | 'date' | 'totalAmount' | 'productionCost' | 'profit'> & { date?: string }
+  saleData: Omit<Sale, 'id' | 'date' | 'totalAmount' | 'productionCost' | 'profit'> & { date?: string },
+  customSaleId?: string,
+  customStockTxId?: string
 ): Promise<Sale> {
   const productRef = doc(db, 'products', saleData.productId);
-  const salesColl = collection(db, 'sales');
-  const saleRef = doc(salesColl);
-
-  const txColl = collection(db, 'stockTransactions');
-  const txRef = doc(txColl);
+  const saleRef = customSaleId ? doc(db, 'sales', customSaleId) : doc(collection(db, 'sales'));
+  const txRef = customStockTxId ? doc(db, 'stockTransactions', customStockTxId) : doc(collection(db, 'stockTransactions'));
 
   let createdSale: Sale | null = null;
 
@@ -192,9 +192,10 @@ export async function executeSmartProductionTransaction(
   recipe: Recipe,
   quantityToProduce: number,
   responsible: string,
-  ingredientCostBreakdown: { id: string; cost: number; totalNeeded: number }[]
+  ingredientCostBreakdown: { id: string; cost: number; totalNeeded: number }[],
+  customLogId?: string
 ): Promise<SmartProductionLog> {
-  const resultLogRef = doc(collection(db, 'smartProductionLogs'));
+  const resultLogRef = customLogId ? doc(db, 'smartProductionLogs', customLogId) : doc(collection(db, 'smartProductionLogs'));
   const finalProductRef = doc(db, 'products', recipe.productId);
 
   const totalIngredientsCost = ingredientCostBreakdown.reduce((sum, item) => sum + (item.cost * item.totalNeeded), 0);
