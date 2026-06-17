@@ -411,7 +411,7 @@ export const BiomateProvider: React.FC<{ children: React.ReactNode }> = ({ child
       };
       console.log(`[OPTIMISTIC HOLD] Registered local hold for product ${id}: stock = ${data.stock}`);
     }
-    if (isMockFirebase) return;
+    if (isMockFirebase || !isAuthenticated) return;
     try {
       const cleaned = cleanData(data);
       console.log("Firestore Save:", cleaned);
@@ -423,7 +423,7 @@ export const BiomateProvider: React.FC<{ children: React.ReactNode }> = ({ child
   };
 
   const removeDoc = async (coll: string, id: string) => {
-    if (isMockFirebase) return;
+    if (isMockFirebase || !isAuthenticated) return;
     try {
       console.log("Firestore Delete:", id);
       await deleteDoc(doc(db, coll, id));
@@ -1027,8 +1027,8 @@ export const BiomateProvider: React.FC<{ children: React.ReactNode }> = ({ child
     // Optimistic sale append
     setSales(prev => [finalSale, ...prev]);
 
-    if (isMockFirebase) {
-      console.log("Mock Sale Registered:", finalSale);
+    if (isMockFirebase || !isAuthenticated) {
+      console.log("Local/Mock Sale Registered:", finalSale);
       return true;
     }
 
@@ -1065,8 +1065,8 @@ export const BiomateProvider: React.FC<{ children: React.ReactNode }> = ({ child
     // Optimistic deletion of sale
     setSales(prev => prev.filter(s => s.id !== id));
 
-    if (isMockFirebase) {
-      console.log("Mock Sale Deleted:", id);
+    if (isMockFirebase || !isAuthenticated) {
+      console.log("Local/Mock Sale Deleted:", id);
       return;
     }
 
@@ -1250,8 +1250,8 @@ export const BiomateProvider: React.FC<{ children: React.ReactNode }> = ({ child
     // Optimistically append the log
     setSmartProductionLogs(prev => [finalLog, ...prev]);
 
-    if (isMockFirebase) {
-      console.log("Mock Smart Production Registered:", finalLog);
+    if (isMockFirebase || !isAuthenticated) {
+      console.log("Local/Mock Smart Production Registered:", finalLog);
       return { success: true };
     }
 
@@ -1305,8 +1305,8 @@ export const BiomateProvider: React.FC<{ children: React.ReactNode }> = ({ child
     // Optimistically delete log from local state
     setSmartProductionLogs(prev => prev.filter(l => l.id !== id));
 
-    if (isMockFirebase) {
-      console.log("Mock Smart Production Log Deleted:", id);
+    if (isMockFirebase || !isAuthenticated) {
+      console.log("Local/Mock Smart Production Log Deleted:", id);
       return;
     }
 
@@ -1360,8 +1360,8 @@ export const BiomateProvider: React.FC<{ children: React.ReactNode }> = ({ child
       return p;
     }));
 
-    if (isMockFirebase) {
-      console.log("Mock Stock Movement Added:", finalTx);
+    if (isMockFirebase || !isAuthenticated) {
+      console.log("Local/Mock Stock Movement Added:", finalTx);
       return;
     }
 
