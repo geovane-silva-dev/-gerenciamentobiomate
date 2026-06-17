@@ -46,6 +46,7 @@ export default function InventoryView() {
   const transactions = stockTransactions;
   const ids = transactions.map(tx => tx.id);
   console.log("Rendered IDs:", ids);
+  console.log("Rendered Items:", transactions);
 
   // Filter products positions
   const filteredProducts = useMemo(() => {
@@ -126,27 +127,17 @@ export default function InventoryView() {
     }
 
     const executeAdjust = () => {
-      const nextStock = adjustType === 'entrada' 
+      const stock = selectedProduct.stock;
+      const movement = adjustType === 'entrada' ? `+${qty}` : `-${qty}`;
+      const finalStock = adjustType === 'entrada' 
         ? selectedProduct.stock + qty 
         : Math.max(0, selectedProduct.stock - qty);
 
-      const stock = selectedProduct.stock;
-      const movement = adjustType === 'entrada' ? `+${qty}` : `-${qty}`;
-      const updatedData = {
-        ...selectedProduct,
-        stock: nextStock
-      };
-      const finalStock = nextStock;
-
       console.log("Stock Before:", stock);
       console.log("Movement Applied:", movement);
-      console.log("Firestore Update:", updatedData);
       console.log("Final Stock:", finalStock);
 
-      // Update product stock in globally shared context
-      updateProduct(selectedProduct.id, updatedData);
-
-      // Create log audit entry
+      // Create log audit entry (under the hood, this will transactionally update BOTH product stock and the log document atomically)
       addStockTransaction({
         date: adjustDate ? new Date(adjustDate + 'T12:00:00').toISOString() : new Date().toISOString(),
         productId: selectedProduct.id,

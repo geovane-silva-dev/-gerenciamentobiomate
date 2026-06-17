@@ -2,6 +2,13 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { Category, Product, Sale, Expense, ProductionBatch, SidebarTab, Recipe, SmartProductionLog, StockTransaction, Announcement } from '../types';
 import { db, auth, OperationType, handleFirestoreError, isMockFirebase } from '../firebase';
 import { 
+  addStockMovementTransaction,
+  registerSaleTransaction,
+  deleteSaleTransaction,
+  executeSmartProductionTransaction,
+  deleteSmartProductionLogTransaction
+} from '../services/firestore';
+import { 
   collection, 
   doc, 
   setDoc, 
@@ -408,7 +415,7 @@ export const BiomateProvider: React.FC<{ children: React.ReactNode }> = ({ child
     try {
       const cleaned = cleanData(data);
       console.log("Firestore Save:", cleaned);
-      await setDoc(doc(db, coll, id), cleaned);
+      await setDoc(doc(db, coll, id), cleaned, { merge: true });
     } catch (error) {
       console.error(`Error saving document to Firestore at ${coll}/${id}:`, error);
       handleFirestoreError(error, OperationType.WRITE, `${coll}/${id}`);
@@ -790,10 +797,12 @@ export const BiomateProvider: React.FC<{ children: React.ReactNode }> = ({ child
         list.push({ ...d.data(), id: d.id } as StockTransaction);
       });
       list.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-      console.log("Realtime Snapshot:", snapshot);
-      console.log("Firestore Docs:", list);
       
       const docs = list;
+      console.log("Realtime Snapshot:", docs);
+      const ids = docs.map(tx => tx.id);
+      console.log("Firestore IDs:", ids);
+      
       if (docs.length === 0) {
         console.log("History empty");
         console.log("Seed prevented");
@@ -802,7 +811,13 @@ export const BiomateProvider: React.FC<{ children: React.ReactNode }> = ({ child
       
       if (docs.length > 0 || isCloudReady) {
         setStockTransactions(prev => {
-          const merged = mergeRealtimeList('stockTransactions', docs, prev);
+          const tempItems = prev.filter(t => t.id.startsWith('tx-temp-'));
+          const merged = [...tempItems];
+          docs.forEach(docItem => {
+            if (!merged.some(m => m.id === docItem.id)) {
+              merged.push(docItem);
+            }
+          });
           merged.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
           return merged;
         });
@@ -1019,14 +1034,14 @@ export const BiomateProvider: React.FC<{ children: React.ReactNode }> = ({ child
     const targetProduct = products.find(p => p.id === saleData.productId);
     if (!targetProduct) return false;
 
-    // Check inventory availability (allow fallback/selling with warnings but deduct correctly)
     const quantity = Number(saleData.quantity);
     const cost = targetProduct.costPrice * quantity;
     const totalAmount = Number(saleData.unitPrice) * quantity;
     const profit = totalAmount - cost;
 
-    const newSale: Sale = {
-      id: `sale-${Date.now()}`,
+    const tempSaleId = `sale-temp-${Date.now()}`;
+    const tempSale: Sale = {
+      id: tempSaleId,
       date: saleData.date || new Date().toISOString(),
       productId: saleData.productId,
       quantity,
@@ -1037,36 +1052,68 @@ export const BiomateProvider: React.FC<{ children: React.ReactNode }> = ({ child
       profit
     };
 
-    // Deduct stock
+    // Optimistic product stock reduction
     setProducts(prev => prev.map(p => {
       if (p.id === saleData.productId) {
-        const updatedProd = { ...p, stock: Math.max(0, p.stock - quantity) };
-        saveDoc('products', p.id, updatedProd);
-        return updatedProd;
+        return { ...p, stock: Math.max(0, p.stock - quantity) };
       }
       return p;
     }));
 
-    setSales(prev => [newSale, ...prev]);
-    saveDoc('sales', newSale.id, newSale);
+    // Optimistic sale append
+    setSales(prev => [tempSale, ...prev]);
+
+    // Perform atomic transaction on the database
+    registerSaleTransaction(saleData).then(savedSale => {
+      setSales(prev => {
+        const alreadyHasReal = prev.some(s => s.id === savedSale.id);
+        if (alreadyHasReal) {
+          return prev.filter(s => s.id !== tempSaleId);
+        }
+        return prev.map(s => s.id === tempSaleId ? savedSale : s);
+      });
+    }).catch(err => {
+      console.error("Failed to complete sale transactionally:", err);
+      // Revert optimistic updates on error
+      setSales(prev => prev.filter(s => s.id !== tempSaleId));
+      setProducts(prev => prev.map(p => {
+        if (p.id === saleData.productId) {
+          return { ...p, stock: p.stock + quantity };
+        }
+        return p;
+      }));
+    });
+
     return true;
   };
 
   const deleteSale = (id: string) => {
     const saleToDelete = sales.find(s => s.id === id);
-    if (saleToDelete) {
-      // Revert product stock
+    if (!saleToDelete) return;
+
+    // Optimistic revert of product stock
+    setProducts(prev => prev.map(p => {
+      if (p.id === saleToDelete.productId) {
+        return { ...p, stock: p.stock + saleToDelete.quantity };
+      }
+      return p;
+    }));
+
+    // Optimistic deletion of sale
+    setSales(prev => prev.filter(s => s.id !== id));
+
+    // Execute transactional deletion
+    deleteSaleTransaction(id).catch(err => {
+      console.error("Failed to delete sale transactionally:", err);
+      // Revert optimistic updates on error
+      setSales(prev => [saleToDelete, ...prev]);
       setProducts(prev => prev.map(p => {
         if (p.id === saleToDelete.productId) {
-          const updatedProd = { ...p, stock: p.stock + saleToDelete.quantity };
-          saveDoc('products', p.id, updatedProd);
-          return updatedProd;
+          return { ...p, stock: Math.max(0, p.stock - saleToDelete.quantity) };
         }
         return p;
       }));
-    }
-    setSales(prev => prev.filter(s => s.id !== id));
-    removeDoc('sales', id);
+    });
   };
 
   const registerExpense = (exp: Omit<Expense, 'id'>) => {
@@ -1200,33 +1247,9 @@ export const BiomateProvider: React.FC<{ children: React.ReactNode }> = ({ child
     const totalIngredientsCost = ingredientCostBreakdown.reduce((sum, item) => sum + (item.cost * item.totalNeeded), 0);
     const unitCostPrice = quantityToProduce > 0 ? (totalIngredientsCost / quantityToProduce) : 0;
 
-    setProducts(prev => prev.map(p => {
-      if (p.id === recipe.productId) {
-        const updatedProd = {
-          ...p,
-          stock: p.stock + quantityToProduce,
-          costPrice: Number(unitCostPrice.toFixed(2))
-        };
-        saveDoc('products', p.id, updatedProd);
-        return updatedProd;
-      }
-      
-      const ingUsage = ingredientCostBreakdown.find(item => item.id === p.id);
-      if (ingUsage) {
-        const updatedProd = {
-          ...p,
-          stock: Math.max(0, p.stock - ingUsage.totalNeeded)
-        };
-        saveDoc('products', p.id, updatedProd);
-        return updatedProd;
-      }
-
-      return p;
-    }));
-
-    // Register smart log
-    const newLog: SmartProductionLog = {
-      id: `slog-${Date.now()}`,
+    const tempLogId = `slog-temp-${Date.now()}`;
+    const tempLog: SmartProductionLog = {
+      id: tempLogId,
       recipeId: recipe.id,
       productId: recipe.productId,
       quantityProduced: quantityToProduce,
@@ -1235,60 +1258,167 @@ export const BiomateProvider: React.FC<{ children: React.ReactNode }> = ({ child
       responsible: responsible || 'Rosana'
     };
 
-    setSmartProductionLogs(prev => [newLog, ...prev]);
-    saveDoc('smartProductionLogs', newLog.id, newLog);
+    // Optimistically update products stock local cache
+    setProducts(prev => prev.map(p => {
+      if (p.id === recipe.productId) {
+        return {
+          ...p,
+          stock: p.stock + quantityToProduce,
+          costPrice: Number(unitCostPrice.toFixed(2))
+        };
+      }
+      const ingUsage = ingredientCostBreakdown.find(item => item.id === p.id);
+      if (ingUsage) {
+        return {
+          ...p,
+          stock: Math.max(0, p.stock - ingUsage.totalNeeded)
+        };
+      }
+      return p;
+    }));
+
+    // Optimistically append the log
+    setSmartProductionLogs(prev => [tempLog, ...prev]);
+
+    // Execute the database transaction
+    executeSmartProductionTransaction(
+      recipe,
+      quantityToProduce,
+      responsible,
+      ingredientCostBreakdown
+    ).then(savedLog => {
+      setSmartProductionLogs(prev => {
+        const alreadyHasReal = prev.some(l => l.id === savedLog.id);
+        if (alreadyHasReal) {
+          return prev.filter(l => l.id !== tempLogId);
+        }
+        return prev.map(l => l.id === tempLogId ? savedLog : l);
+      });
+    }).catch(err => {
+      console.error("Failed to complete smart production transactionally:", err);
+      // Revert optimistic updates
+      setSmartProductionLogs(prev => prev.filter(l => l.id !== tempLogId));
+      setProducts(prev => prev.map(p => {
+        if (p.id === recipe.productId) {
+          return { ...p, stock: Math.max(0, p.stock - quantityToProduce) };
+        }
+        const ingUsage = ingredientCostBreakdown.find(item => item.id === p.id);
+        if (ingUsage) {
+          return { ...p, stock: p.stock + ingUsage.totalNeeded };
+        }
+        return p;
+      }));
+    });
 
     return { success: true };
   };
 
   const deleteSmartProductionLog = (id: string) => {
     const logToDelete = smartProductionLogs.find(l => l.id === id);
-    if (logToDelete) {
-      const recipe = recipes.find(r => r.id === logToDelete.recipeId);
-      if (recipe) {
-        setProducts(prev => prev.map(p => {
-          if (p.id === logToDelete.productId) {
-            const updatedProd = {
-              ...p,
-              stock: Math.max(0, p.stock - logToDelete.quantityProduced)
-            };
-            saveDoc('products', p.id, updatedProd);
-            return updatedProd;
-          }
-          const ing = recipe.ingredients.find(i => i.productId === p.id);
-          if (ing) {
-            const updatedProd = {
-              ...p,
-              stock: p.stock + (ing.quantityNeeded * logToDelete.quantityProduced)
-            };
-            saveDoc('products', p.id, updatedProd);
-            return updatedProd;
-          }
-          return p;
-        }));
+    if (!logToDelete) return;
+    
+    const recipe = recipes.find(r => r.id === logToDelete.recipeId);
+    if (!recipe) return;
+
+    // Optimistically revert product and raw material stock
+    setProducts(prev => prev.map(p => {
+      if (p.id === logToDelete.productId) {
+        return { ...p, stock: Math.max(0, p.stock - logToDelete.quantityProduced) };
       }
-    }
+      const ing = recipe.ingredients.find(i => i.productId === p.id);
+      if (ing) {
+        return { ...p, stock: p.stock + (ing.quantityNeeded * logToDelete.quantityProduced) };
+      }
+      return p;
+    }));
+
+    // Optimistically delete log from local state
     setSmartProductionLogs(prev => prev.filter(l => l.id !== id));
-    removeDoc('smartProductionLogs', id);
+
+    // Execute transaction database operation
+    deleteSmartProductionLogTransaction(logToDelete, recipes).catch(err => {
+      console.log("Failed to revert smart production transactionally:", err);
+      // Revert optimistic updates on error
+      setSmartProductionLogs(prev => [logToDelete, ...prev]);
+      setProducts(prev => prev.map(p => {
+        if (p.id === logToDelete.productId) {
+          return { ...p, stock: p.stock + logToDelete.quantityProduced };
+        }
+        const ing = recipe.ingredients.find(i => i.productId === p.id);
+        if (ing) {
+          return { ...p, stock: Math.max(0, p.stock - (ing.quantityNeeded * logToDelete.quantityProduced)) };
+        }
+        return p;
+      }));
+    });
   };
 
-  const addStockTransaction = (tx: Omit<StockTransaction, 'id' | 'date'> & { date?: string }) => {
-    const randomSuffix = Math.random().toString(36).substring(2, 6);
-    const newTx: StockTransaction = {
+  const addStockTransaction = async (tx: Omit<StockTransaction, 'id' | 'date'> & { date?: string }) => {
+    const tempId = `tx-temp-${Date.now()}`;
+    const tempTx: StockTransaction = {
       ...tx,
-      id: `tx-${Date.now()}-${randomSuffix}`,
+      id: tempId,
       date: tx.date || new Date().toISOString()
     };
     
-    setStockTransactions(prev => {
-      const merged = [newTx, ...prev];
-      console.log("All Movements:", merged);
-      console.log("New Movement:", newTx);
-      return merged;
-    });
+    // Optimistically increment local list to keep UI instantly fluid
+    setStockTransactions(prev => [tempTx, ...prev]);
 
-    console.log("Firestore Save:", newTx);
-    saveDoc('stockTransactions', newTx.id, newTx);
+    // Optimistically update product stock list state & local hold cache to avoid latency gaps
+    const qty = Number(tx.quantity);
+    let originalStock = 0;
+    setProducts(prev => prev.map(p => {
+      if (p.id === tx.productId) {
+        originalStock = p.stock;
+        const nextStock = tx.type === 'entrada' 
+          ? p.stock + qty 
+          : Math.max(0, p.stock - qty);
+        
+        // Register hold for real-time onSnapshot listener
+        localProductUpdates.current[tx.productId] = {
+          stock: nextStock,
+          timestamp: Date.now()
+        };
+        return { ...p, stock: nextStock };
+      }
+      return p;
+    }));
+
+    try {
+      const savedTx = await addStockMovementTransaction(
+        tx.productId,
+        tx.type,
+        tx.quantity,
+        tx.reason,
+        tx.operator,
+        tx.date
+      );
+      
+      // Update with exact document ID from transaction response and log exact events
+      console.log("Firestore Movement Added:", savedTx);
+      console.log("Movement Persisted Successfully");
+
+      setStockTransactions(prev => {
+        const alreadyHasReal = prev.some(t => t.id === savedTx.id);
+        if (alreadyHasReal) {
+          return prev.filter(t => t.id !== tempId);
+        }
+        return prev.map(t => t.id === tempId ? savedTx : t);
+      });
+    } catch (err) {
+      console.error("Failed to append stock transaction transactionally:", err);
+      // Revert optimistic log
+      setStockTransactions(prev => prev.filter(t => t.id !== tempId));
+      
+      // Revert optimistic product stock
+      setProducts(prev => prev.map(p => {
+        if (p.id === tx.productId) {
+          delete localProductUpdates.current[tx.productId];
+          return { ...p, stock: originalStock };
+        }
+        return p;
+      }));
+    }
   };
 
   const deleteStockTransaction = (id: string) => {
